@@ -465,6 +465,75 @@ const NetworkView = ({ showToast, userState }) => {
 };
 
 
+// --- ENTRY ANIMATION ---
+const EntryAnimation = ({ onComplete }) => {
+  const [phase, setPhase] = useState(0); // 0: "Stay ahead", 1: "[↑] ahead", 2: done
+  const phaseRef = useRef(0);
+  const scrollLocked = useRef(false);
+
+  useEffect(() => {
+    const handleWheel = (e) => {
+      if (scrollLocked.current || phaseRef.current >= 2) return;
+      
+      // Only progress on scroll down
+      if (e.deltaY <= 0) return;
+
+      scrollLocked.current = true;
+      const next = phaseRef.current + 1;
+      phaseRef.current = next;
+      setPhase(next);
+
+      if (next >= 2) {
+        setTimeout(onComplete, 800);
+      }
+
+      setTimeout(() => { scrollLocked.current = false; }, 800);
+    };
+
+    let touchStartY = 0;
+    const handleTouchStart = (e) => { touchStartY = e.touches[0].clientY; };
+    const handleTouchEnd = (e) => {
+      if (scrollLocked.current || phaseRef.current >= 2) return;
+      const deltaY = touchStartY - e.changedTouches[0].clientY;
+      if (deltaY < 30) return; // needs a meaningful swipe up
+      scrollLocked.current = true;
+      const next = phaseRef.current + 1;
+      phaseRef.current = next;
+      setPhase(next);
+      if (next >= 2) setTimeout(onComplete, 800);
+      setTimeout(() => { scrollLocked.current = false; }, 800);
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [onComplete]);
+
+  // Fully unmount after fade-out
+  if (phase >= 2) {
+    return (
+      <div className="entry-animation-container hidden" />
+    );
+  }
+
+  return (
+    <div className="entry-animation-container">
+      <div className={`entry-slide ${phase === 0 ? 'active' : 'exit'}`}>
+        Stay ahead
+      </div>
+      <div className={`entry-slide ${phase === 1 ? 'active' : ''}`}>
+        <div className="entry-icon">↑</div> ahead
+      </div>
+    </div>
+  );
+};
+
 // --- ONBOARDING VIEWS ---
 const Onboarding = ({ onComplete, session }) => {
   const [step, setStep] = useState(0); // 0: Start, 1: Details, 2: Goal, 3: Skills, 4: AI Analysis Loading
@@ -697,6 +766,7 @@ const Auth = () => {
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
+  const [showEntryAuth, setShowEntryAuth] = useState(true); // Manages the full page entry animation
   const [session, setSession] = useState(null);
   const [loadingSession, setLoadingSession] = useState(true);
 
@@ -737,6 +807,17 @@ export default function App() {
     });
     setHasOnboarded(true);
   };
+
+  // Skip entry animation if user already has a session (they're logged in)
+  useEffect(() => {
+    if (!loadingSession && session) {
+      setShowEntryAuth(false);
+    }
+  }, [loadingSession, session]);
+
+  if (showEntryAuth) {
+    return <EntryAnimation onComplete={() => setShowEntryAuth(false)} />;
+  }
 
   if (loadingSession) {
     return (
