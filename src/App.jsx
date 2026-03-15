@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from './supabaseClient';
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { auth } from './firebaseConfig';
+import { saveUserData, getUserData, updateUserData } from './firebaseService';
 
 // Icons
 const IconDashboard = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>;
@@ -95,7 +97,7 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-const Sidebar = ({ activeTab, setActiveTab, userProfile }) => (
+const Sidebar = ({ activeTab, setActiveTab, userProfile, onSignOut }) => (
   <aside className="sidebar">
     <div className="logo">
       <span>.</span>ahead
@@ -131,7 +133,7 @@ const Sidebar = ({ activeTab, setActiveTab, userProfile }) => (
         </div>
       </div>
       <button 
-        onClick={() => supabase.auth.signOut()} 
+        onClick={onSignOut} 
         className="btn-secondary" 
         style={{ width: '100%', marginTop: '1rem', fontSize: '0.75rem', padding: '0.4rem', justifyContent: 'center' }}
       >
@@ -535,11 +537,11 @@ const EntryAnimation = ({ onComplete }) => {
 };
 
 // --- ONBOARDING VIEWS ---
-const Onboarding = ({ onComplete, session }) => {
+const Onboarding = ({ onComplete, user }) => {
   const [step, setStep] = useState(0); // 0: Start, 1: Details, 2: Goal, 3: Skills, 4: AI Analysis Loading
   const [formData, setFormData] = useState({
     name: '',
-    email: session?.user?.email || '',
+    email: user?.email || '',
     education: '',
     goal: '',
     skills: ''
@@ -657,35 +659,32 @@ const Onboarding = ({ onComplete, session }) => {
   );
 };
 
+
 // --- AUTHENTICATION VIEW ---
 const Auth = () => {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState('email'); // 'email' | 'otp'
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  const handleSendOtp = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
-    const { error } = await supabase.auth.signInWithOtp({ email });
-    if (error) {
-      setMessage(error.message);
-    } else {
-      setMessage('OTP sent to your email!');
-      setStep('otp');
-    }
-    setLoading(false);
-  };
-
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage('');
-    const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: 'email' });
-    if (error) {
-      setMessage(error.message);
+    try {
+      if (isSignUp) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (error) {
+      const msg = error.code === 'auth/email-already-in-use' ? 'This email is already registered. Try signing in.'
+        : error.code === 'auth/invalid-credential' ? 'Invalid email or password.'
+        : error.code === 'auth/weak-password' ? 'Password must be at least 6 characters.'
+        : error.code === 'auth/invalid-email' ? 'Please enter a valid email address.'
+        : error.message;
+      setMessage(msg);
     }
     setLoading(false);
   };
@@ -695,70 +694,52 @@ const Auth = () => {
       <div className="logo" style={{ marginBottom: '2rem' }}><span>.</span>ahead</div>
       
       <div className="onboarding-box animate-slide-up">
-        {step === 'email' ? (
-          <form onSubmit={handleSendOtp}>
-            <div style={{ textAlign: 'center' }}>
-              <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Sign In to .ahead</h2>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Enter your email to receive a secure one-time password.</p>
-              
-              <input 
-                type="email" 
-                placeholder="Your Email Address" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
-                className="input-pure" 
-              />
-              
-              <button 
-                type="submit" 
-                className="btn-primary" 
-                style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} 
-                disabled={loading}
+        <form onSubmit={handleSubmit}>
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{isSignUp ? 'Create your account' : 'Welcome back'}</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
+              {isSignUp ? 'Sign up to start your personalized AI-powered journey.' : 'Sign in to continue your journey.'}
+            </p>
+            
+            <input 
+              type="email" 
+              placeholder="Email Address" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              required 
+              className="input-pure" 
+            />
+            <input 
+              type="password" 
+              placeholder="Password (min 6 characters)" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              required 
+              className="input-pure" 
+            />
+            
+            <button 
+              type="submit" 
+              className="btn-primary" 
+              style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} 
+              disabled={loading}
+            >
+              {loading ? (isSignUp ? 'Creating Account...' : 'Signing In...') : (isSignUp ? 'Create Account' : 'Sign In')}
+            </button>
+            
+            {message && <p style={{ marginTop: '1.5rem', color: '#ff6b6b', fontSize: '0.9rem' }}>{message}</p>}
+            
+            <p style={{ marginTop: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+              <span 
+                onClick={() => { setIsSignUp(!isSignUp); setMessage(''); }} 
+                style={{ color: '#fff', cursor: 'pointer', textDecoration: 'underline' }}
               >
-                {loading ? 'Sending OTP...' : 'Send Magic OTP'}
-              </button>
-              
-              {message && <p style={{ marginTop: '1.5rem', color: 'var(--text-main)', fontSize: '0.9rem', textAlign: 'center' }}>{message}</p>}
-            </div>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOtp}>
-            <div style={{ textAlign: 'center' }}>
-              <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Verify OTP</h2>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Enter the 6-digit code sent to <strong>{email}</strong>.</p>
-              
-              <input 
-                type="text" 
-                placeholder="6-digit OTP" 
-                value={otp} 
-                onChange={(e) => setOtp(e.target.value)} 
-                required 
-                className="input-pure" 
-              />
-              
-              <button 
-                type="submit" 
-                className="btn-primary" 
-                style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} 
-                disabled={loading}
-              >
-                {loading ? 'Verifying...' : 'Verify & Continue'}
-              </button>
-              
-              {message && <p style={{ marginTop: '1.5rem', color: 'var(--text-main)', fontSize: '0.9rem', textAlign: 'center' }}>{message}</p>}
-              
-              <button 
-                type="button" 
-                onClick={() => { setStep('email'); setMessage(''); }} 
-                className="btn-secondary" 
-                style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }}
-              >
-                Back to Email
-              </button>
-            </div>
-          </form>
-        )}
+                {isSignUp ? 'Sign In' : 'Sign Up'}
+              </span>
+            </p>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -766,60 +747,116 @@ const Auth = () => {
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
-  const [showEntryAuth, setShowEntryAuth] = useState(true); // Manages the full page entry animation
-  const [session, setSession] = useState(null);
-  const [loadingSession, setLoadingSession] = useState(true);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showEntry, setShowEntry] = useState(true);
 
   const [hasOnboarded, setHasOnboarded] = useState(false);
+  const [firestoreLoading, setFirestoreLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [toastMsg, setToastMsg] = useState(null);
   
-  // Entire application dynamic state derived from AI onboarding
   const [userState, setUserState] = useState({
     userProfile: null,
     aiData: null
   });
 
+  // Listen for Firebase auth state changes
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoadingSession(false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      
+      if (firebaseUser) {
+        // User is signed in — try to load their data
+        setFirestoreLoading(true);
+        try {
+          // First check localStorage cache for instant load
+          const cached = localStorage.getItem('ahead_user_state');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed.userProfile && parsed.aiData) {
+              setUserState(parsed);
+              setHasOnboarded(true);
+            }
+          }
+
+          // Then verify with Firestore (source of truth)
+          const data = await getUserData(firebaseUser.uid);
+          if (data && data.aiData) {
+            const firestoreState = {
+              userProfile: {
+                name: data.name,
+                email: data.email,
+                education: data.education,
+                goal: data.goal,
+                skills: data.skills
+              },
+              aiData: data.aiData
+            };
+            setUserState(firestoreState);
+            setHasOnboarded(true);
+            localStorage.setItem('ahead_user_state', JSON.stringify(firestoreState));
+          }
+        } catch (err) {
+          console.error('Error loading user data:', err);
+        }
+        setFirestoreLoading(false);
+        setShowEntry(false); // Skip entry animation for returning users
+      } else {
+        // User signed out
+        setHasOnboarded(false);
+        setUserState({ userProfile: null, aiData: null });
+      }
+      
+      setAuthLoading(false);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
+
+  // Sync userState changes to both localStorage and Firestore
+  useEffect(() => {
+    if (userState.userProfile && userState.aiData && user) {
+      localStorage.setItem('ahead_user_state', JSON.stringify(userState));
+      updateUserData(user.uid, { aiData: userState.aiData }).catch(console.error);
+    }
+  }, [userState]);
 
   const showToast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  const handleOnboardingComplete = (profileData, generatedAI) => {
-    setUserState({
+  const handleOnboardingComplete = async (profileData, generatedAI) => {
+    const newState = {
       userProfile: profileData,
       aiData: generatedAI
-    });
+    };
+    setUserState(newState);
     setHasOnboarded(true);
+
+    // Persist to Firestore
+    if (user) {
+      try {
+        await saveUserData(user.uid, profileData, generatedAI);
+      } catch (err) {
+        console.error('Error saving to Firestore:', err);
+      }
+    }
   };
 
-  // Skip entry animation if user already has a session (they're logged in)
-  useEffect(() => {
-    if (!loadingSession && session) {
-      setShowEntryAuth(false);
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      localStorage.removeItem('ahead_user_state');
+      setShowEntry(true);
+    } catch (err) {
+      console.error('Sign out error:', err);
     }
-  }, [loadingSession, session]);
+  };
 
-  if (showEntryAuth) {
-    return <EntryAnimation onComplete={() => setShowEntryAuth(false)} />;
-  }
-
-  if (loadingSession) {
+  // Loading spinner while checking auth
+  if (authLoading) {
     return (
       <div className="onboarding-container" style={{ display: 'grid', placeItems: 'center' }}>
         <div className="logo" style={{ animation: 'pulseGlow 2s infinite' }}><span>.</span>ahead</div>
@@ -827,17 +864,34 @@ export default function App() {
     );
   }
 
-  if (!session) {
+  // Entry animation for first-time / signed-out visitors
+  if (showEntry && !user) {
+    return <EntryAnimation onComplete={() => setShowEntry(false)} />;
+  }
+
+  // Not signed in → show Auth
+  if (!user) {
     return <Auth />;
   }
 
+  // Signed in but loading Firestore data
+  if (firestoreLoading) {
+    return (
+      <div className="onboarding-container" style={{ display: 'grid', placeItems: 'center' }}>
+        <div className="logo" style={{ animation: 'pulseGlow 2s infinite' }}><span>.</span>ahead</div>
+        <p style={{ color: 'var(--text-muted)', marginTop: '1rem' }}>Loading your profile...</p>
+      </div>
+    );
+  }
+
+  // Signed in but hasn't onboarded yet
   if (!hasOnboarded) {
-    return <Onboarding onComplete={handleOnboardingComplete} session={session} />;
+    return <Onboarding onComplete={handleOnboardingComplete} user={user} />;
   }
 
   return (
     <div className="app-container">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userProfile={userState.userProfile} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userProfile={userState.userProfile} onSignOut={handleSignOut} />
       <main className="main-content">
         {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} showToast={showToast} userState={userState} />}
         {activeTab === 'skills' && <SkillsView showToast={showToast} userState={userState} setUserState={setUserState} />}
