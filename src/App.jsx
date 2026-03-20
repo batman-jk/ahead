@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from './firebaseConfig';
 import { saveUserData, getUserData, updateUserData } from './firebaseService';
+import { generateAIProfile, regenerateRoadmap } from './geminiService';
 
 // Icons
 const IconDashboard = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>;
@@ -13,67 +14,8 @@ const IconArrowRight = () => <svg width="16" height="16" viewBox="0 0 24 24" fil
 const IconCheck = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>;
 const IconPlus = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
 
-// --- SIMULATED AI ENGINE ---
-// This acts dynamically to generate robust realistic content based on user inputs without hardcoded arrays.
-const generateMockAIResponse = (goalStr, skillsStr) => {
-  const goal = goalStr.toLowerCase();
-  const skillsList = skillsStr.toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-  
-  // Base deterministic hash
-  const scoreBase = goal.length * 10 + skillsList.length * 50;
-  
-  // Generate Skill DNA dynamically based on input
-  const generatedDNA = [
-    {
-      category: 'Core Competency',
-      skills: skillsList.slice(0, 3).map((s, i) => ({ name: s.toUpperCase(), level: Math.max(2, 5 - i), verified: i === 0 }))
-    },
-    {
-      category: goalStr.split(' ')[0] + ' Domain',
-      skills: [
-        { name: 'Architecture design', level: 2, verified: false },
-        { name: 'Optimization & Scaling', level: 1, verified: false },
-        { name: 'Best Practices', level: 3, verified: true }
-      ]
-    },
-    {
-      category: 'Foundation',
-      skills: [
-        { name: 'Problem Solving', level: 4, verified: true },
-        { name: 'Communication', level: 3, verified: false }
-      ]
-    }
-  ].filter(g => g.skills.length > 0);
-
-  // Generate Roadmap dynamically
-  const generatedRoadmap = [
-    { title: `Foundations of ${goalStr}`, status: 'Completed', active: false, resources: [] },
-    { title: `Mastering ${skillsList[0] || 'Core'} within ${goalStr}`, status: 'In Progress', active: true, 
-      resources: [
-        { name: `Advanced ${skillsList[0] || 'Techniques'} Guide`, type: 'Documentation' },
-        { name: `Building ${goalStr} scale applications`, type: 'Interactive Course' }
-      ]
-    },
-    { title: `Advanced Optimization & Tradeoffs`, status: 'Locked', active: false, resources: [
-      { name: `System Design for ${goalStr}`, type: 'Book' }
-    ]},
-    { title: 'Mock Interviews & Negotiation', status: 'Locked', active: false, resources: [] }
-  ];
-
-  // Generate verifications
-  const generatedVerifications = [
-    { id: 1, name: skillsList[1] ? `Advanced ${skillsList[1].toUpperCase()}` : 'System Architecture', type: 'Core Skill', reward: `+${Math.floor(Math.random() * 100 + 50)} pts` },
-    { id: 2, name: `${goalStr} Domain Knowledge`, type: 'Specialization', reward: `+${Math.floor(Math.random() * 200 + 100)} pts` }
-  ];
-
-  return {
-    aheadScore: 1200 + scoreBase + Math.floor(Math.random() * 100),
-    dna: generatedDNA,
-    roadmap: generatedRoadmap,
-    verifications: generatedVerifications,
-    dailyGoal: `Solve 2 ${goalStr} related architecture problems`,
-  };
-};
+// --- REAL AI ENGINE (Gemini) ---
+// generateAIProfile and regenerateRoadmap are imported from geminiService.js
 
 const Toast = ({ message, onClose }) => {
   if (!message) return null;
@@ -360,23 +302,25 @@ const RoadmapView = ({ showToast, userState, setUserState }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const { aiData } = userState;
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setIsGenerating(true);
-    showToast(`AI Analyzing Skill DNA against new goal: ${goal}...`);
-    
-    setTimeout(() => {
-      // Regenerate based on new goal and current skills
-      const newResponse = generateMockAIResponse(goal, userState.userProfile.skills);
-      
+    showToast(`AI re-architecting roadmap for: ${goal}...`);
+    try {
+      const newRoadmap = await regenerateRoadmap(
+        goal,
+        userState.userProfile.skills,
+        userState.aiData.dna
+      );
       setUserState(prev => ({
         ...prev,
         userProfile: { ...prev.userProfile, goal },
-        aiData: { ...prev.aiData, roadmap: newResponse.roadmap }
+        aiData: { ...prev.aiData, roadmap: newRoadmap }
       }));
-      
-      setIsGenerating(false);
-      showToast('Roadmap uniquely tailored to you!');
-    }, 2000);
+      showToast('Roadmap uniquely tailored to you by Gemini!');
+    } catch (err) {
+      showToast('AI error: ' + err.message);
+    }
+    setIsGenerating(false);
   };
 
   return (
@@ -553,33 +497,45 @@ const Onboarding = ({ onComplete, user }) => {
 
   useEffect(() => {
     if (step === 4) {
-      // Simulate AI loading process
-      let timeouts = [];
-      const texts = [
-        "Connecting to AI Engine...",
-        "Parsing raw skill inputs...",
-        "Constructing Skill DNA Matrix based on domain knowledge...",
-        "Evaluating systemic gaps in current competency profile...",
-        "Aligning trajectory against target goal: " + formData.goal + "...",
-        "Compiling personalized phase milestones...",
-        "Finalizing Ahead Score topology...",
-        "Success. Your unique dashboard is ready."
+      let cancelled = false;
+      const statusMessages = [
+        'Connecting to AI Engine...',
+        'Parsing raw skill inputs...',
+        'Constructing Skill DNA Matrix...',
+        'Evaluating systemic gaps in competency profile...',
+        `Aligning trajectory against goal: ${formData.goal}...`,
+        'Compiling personalized phase milestones...',
+        'Finalizing Ahead Score topology...',
       ];
-      
-      texts.forEach((text, idx) => {
-        timeouts.push(setTimeout(() => {
-          setAnalysisText(text);
-          if (idx === texts.length - 1) {
-            setTimeout(() => {
-              // Complete onboarding and pass generated data
-              const finalAI = generateMockAIResponse(formData.goal, formData.skills);
-              onComplete(formData, finalAI);
-            }, 1500);
-          }
-        }, idx * 1200));
-      });
 
-      return () => timeouts.forEach(clearTimeout);
+      // Cycle through status messages while Gemini is thinking
+      let msgIndex = 0;
+      setAnalysisText(statusMessages[0]);
+      const msgInterval = setInterval(() => {
+        msgIndex = (msgIndex + 1) % statusMessages.length;
+        if (!cancelled) setAnalysisText(statusMessages[msgIndex]);
+      }, 1400);
+
+      // Actually call Gemini
+      generateAIProfile(formData.goal, formData.skills, formData.name, formData.education)
+        .then((finalAI) => {
+          if (cancelled) return;
+          clearInterval(msgInterval);
+          setAnalysisText('Success. Your unique dashboard is ready.');
+          setTimeout(() => {
+            if (!cancelled) onComplete(formData, finalAI);
+          }, 1000);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          clearInterval(msgInterval);
+          setAnalysisText('AI analysis failed: ' + err.message + '. Please go back and try again.');
+        });
+
+      return () => {
+        cancelled = true;
+        clearInterval(msgInterval);
+      };
     }
   }, [step]);
 
