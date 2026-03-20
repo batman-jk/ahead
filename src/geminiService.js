@@ -7,7 +7,7 @@ const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
  * Returns structured data: aheadScore, dna, roadmap, verifications, dailyGoal.
  */
 export async function generateAIProfile(goal, skills, name, education) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
   const prompt = `You are .ahead's AI engine. A user just completed onboarding. Analyze their profile and generate a structured JSON response.
 
@@ -70,7 +70,7 @@ Rules:
  * Regenerates just the roadmap for a new goal, keeping existing DNA in context.
  */
 export async function regenerateRoadmap(goal, skills, currentDNA) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
   const dnaString = currentDNA.map(g =>
     `${g.category}: ${g.skills.map(s => s.name).join(', ')}`
