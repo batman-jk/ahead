@@ -1,8 +1,14 @@
-//AI classification helper that calls our backend proxy
-// Includes caching and rate limiting for optimal UX
+let activeController = null;
 let lastRequestTime = 0;
 const CACHE_PREFIX = 'ahead_ai_cache_';
 const THROTTLE_MS = 2000;
+
+export const abortActiveClassification = () => {
+  if (activeController) {
+    activeController.abort();
+    activeController = null;
+  }
+};
 
 export const classifyActivityType = async (description) => {
   if (!description.trim()) return null;
@@ -14,7 +20,7 @@ export const classifyActivityType = async (description) => {
     try {
       console.log('AI result served from cache');
       return JSON.parse(cached);
-    } catch (e) {
+    } catch {
       localStorage.removeItem(cacheKey);
     }
   }
@@ -27,26 +33,42 @@ export const classifyActivityType = async (description) => {
   }
   lastRequestTime = now;
 
+  // Abort any previous pending request
+  abortActiveClassification();
+
   try {
-    const response = await fetch('http://localhost:3001/api/classify', {
+    activeController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      if (activeController) activeController.abort();
+    }, 20000); // 20s timeout
+
+    console.log('[AI Debug] Fetching from: /api/classify (via Vite proxy)');
+    const response = await fetch('/api/classify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description })
+      body: JSON.stringify({ description }),
+      signal: activeController.signal
     });
+    
+    clearTimeout(timeoutId);
+    activeController = null;
 
-    if (!response.ok) throw new Error('Backend failed');
+    if (!response.ok) throw new Error(`Backend failed with status: ${response.status}`);
 
     const result = await response.json();
+    console.log('AI classification successful:', result);
     
     // 3. Update Cache
     localStorage.setItem(cacheKey, JSON.stringify(result));
     
     return result;
   } catch (error) {
-    console.error('Frontend AI Error:', error);
-    // Robust fallback
-    return { type: 'learning', skills: [], error: true };
+    activeController = null;
+    if (error.name === 'AbortError') {
+      console.error('AI classification aborted or timed out');
+    } else {
+      console.error('Frontend AI Error:', error);
+    }
+    return null;
   }
 };
-
-

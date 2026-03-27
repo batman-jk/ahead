@@ -1,74 +1,96 @@
--- Profiles table to store user rankings and total points
-create table if not exists public.profiles (
-  id uuid references auth.users on delete cascade primary key,
-  username text,
+-- MASTER RESET SCRIPT FOR .AHEAD
+-- This will DROP existing tables and recreate them to ensure a 100% clean state.
+-- WARNING: This deletes your current user scores and activities.
+
+-- 1. Drop existing triggers and functions
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+DROP TRIGGER IF EXISTS on_activity_logged ON public.activities;
+DROP FUNCTION IF EXISTS public.update_profile_score();
+
+-- 2. Drop existing tables
+DROP TABLE IF EXISTS public.activities;
+DROP TABLE IF EXISTS public.profiles;
+
+-- 3. Create PROFILES table with all new columns
+CREATE TABLE public.profiles (
+  id uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL PRIMARY KEY,
+  username text UNIQUE,
   full_name text,
   avatar_url text,
-  total_points integer default 0,
-  updated_at timestamp with time zone default timezone('utc'::text, now())
+  college text,
+  state text,
+  goal text,
+  skills jsonb DEFAULT '[]'::jsonb,
+  onboarded boolean DEFAULT false,
+  total_score integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+-- ... (rest of the file)
+
+-- 10. MANUAL FIX FOR EXISTING USERS (Run this if you have no profile):
+-- Replace 'YOUR_USER_ID' with the ID from the Auth -> Users tab in Supabase
+-- INSERT INTO public.profiles (id, username, onboarded) 
+-- VALUES ('YOUR_USER_ID', 'your_username', true)
+-- ON CONFLICT (id) DO NOTHING;
+
+-- 4. Create ACTIVITIES table with new column names
+CREATE TABLE public.activities (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  description text NOT NULL,
+  type text CHECK (type IN ('learning', 'practice', 'project')),
+  score integer DEFAULT 0,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Activities table to store learning logs
-create table if not exists public.activities (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users on delete cascade not null,
-  description text not null,
-  type text not null,
-  points integer not null,
-  metadata jsonb default '{}'::jsonb,
-  created_at timestamp with time zone default timezone('utc'::text, now())
-);
+-- 5. Enable Row Level Security (RLS)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
 
--- RLS (Row Level Security) - Basic Setup
-alter table public.profiles enable row level security;
-alter table public.activities enable row level security;
+-- 6. Create RLS Policies (Allow users to read/write their own data)
+CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
--- Policies for Profiles
-drop policy if exists "Public profiles are viewable by everyone" on profiles;
-create policy "Public profiles are viewable by everyone" on profiles for select using (true);
+CREATE POLICY "Users can view their own activities" ON public.activities FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own activities" ON public.activities FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-drop policy if exists "Users can update own profile" on profiles;
-create policy "Users can update own profile" on profiles for update using (auth.uid() = id);
-
--- Policies for Activities
-drop policy if exists "Users can view own activities" on activities;
-create policy "Users can view own activities" on activities for select using (auth.uid() = user_id);
-
-drop policy if exists "Users can insert own activities" on activities;
-create policy "Users can insert own activities" on activities for insert with check (auth.uid() = user_id);
-
--- Trigger to update total_points in profiles when an activity is added
-create or replace function public.update_profile_points()
-returns trigger as $$
-begin
-  update public.profiles
-  set total_points = total_points + new.points
-  where id = new.user_id;
-  return new;
-end;
-$$ language plpgsql security definer;
-
-drop trigger if exists on_activity_logged on public.activities;
-create trigger on_activity_logged
-  after insert on public.activities
-  for each row execute procedure public.update_profile_points();
-
--- Trigger for automatic profile creation on signup
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, username, full_name, avatar_url)
-  values (
-    new.id, 
-    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)), 
-    new.raw_user_meta_data->>'full_name', 
+-- 7. Trigger: Automatically create profile on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, username, full_name, avatar_url)
+  VALUES (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
+    new.raw_user_meta_data->>'full_name',
     new.raw_user_meta_data->>'avatar_url'
   );
-  return new;
-end;
-$$ language plpgsql security definer;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 8. Trigger: Automatically update profile total_score when activity is logged
+CREATE OR REPLACE FUNCTION public.update_profile_score()
+RETURNS trigger AS $$
+BEGIN
+  UPDATE public.profiles
+  SET total_score = total_score + new.score
+  WHERE id = new.user_id;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_activity_logged
+  AFTER INSERT ON public.activities
+  FOR EACH ROW EXECUTE PROCEDURE public.update_profile_score();
+
+-- 9. Add a sample user if needed (Manual)
+-- INSERT INTO public.profiles (id, username, onboarded) VALUES ('your-uuid-here', 'testuser', true);

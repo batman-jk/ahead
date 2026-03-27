@@ -26,4 +26,10 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    files: ['server/**/*.js', 'check*.js', 'test_mistral.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])

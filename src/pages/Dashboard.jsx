@@ -1,39 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
-import { classifyActivityType } from '../lib/ai';
-import { Target, BookOpen, Code, Terminal, Zap, CheckCircle2, Sparkles, X } from 'lucide-react';
+import { useAuth } from '../context/auth-context';
+import { classifyActivityType, abortActiveClassification } from '../lib/ai';
+import { motion as Motion } from 'framer-motion';
+import { BookOpen, Code, Terminal, Zap, CheckCircle2, Sparkles, Flame, TrendingUp, LogOut } from 'lucide-react';
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const [activities, setActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
   
-  // Form State
   const [description, setDescription] = useState('');
-  const [type, setType] = useState('learning');
-  const [isClassifying, setIsClassifying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastResult, setLastResult] = useState(null);
   
-  // AI Suggestion State
-  const [aiSuggestion, setAiSuggestion] = useState(null);
-  
-  const [stats, setStats] = useState({ totalPoints: 0, streak: 0 });
+  const [stats, setStats] = useState({ totalScore: 0, streak: 0, rank: 0 });
 
-  useEffect(() => {
-    fetchUserData();
-  }, [user]);
-
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
     if (!supabase || !user) {
       setLoadingActivities(false);
       return;
     }
 
     try {
-      const { data: profile } = await supabase
+      const { data: profileData } = await supabase
         .from('profiles')
-        .select('total_points')
+        .select('total_score')
         .eq('id', user.id)
         .single();
       
@@ -44,40 +36,63 @@ export default function Dashboard() {
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (profile) setStats(prev => ({ ...prev, totalPoints: profile.total_points }));
+      // Calculate rank
+      let rank = 0;
+      if (profileData) {
+        const { count } = await supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .gt('total_score', profileData.total_score);
+        rank = (count || 0) + 1;
+      }
+
+      // Calculate streak (consecutive days with activity)
+      let streak = 0;
+      if (acts && acts.length > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let checkDate = new Date(today);
+        
+        const actDates = [...new Set(acts.map(a => {
+          const d = new Date(a.created_at);
+          d.setHours(0, 0, 0, 0);
+          return d.getTime();
+        }))].sort((a, b) => b - a);
+
+        for (const dateTime of actDates) {
+          if (dateTime === checkDate.getTime()) {
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else if (dateTime === checkDate.getTime() - 86400000) {
+            // Allow checking yesterday if today has no activity
+            checkDate = new Date(dateTime);
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
+        }
+      }
+
+      if (profileData) {
+        setStats({ totalScore: profileData.total_score, streak, rank });
+      } else {
+        console.warn('No profile found for this user. Score triggers may not work.');
+        setStats({ totalScore: 0, streak: 0, rank: 0 });
+      }
       if (acts) setActivities(acts);
     } catch (err) {
       console.error(err);
     } finally {
       setLoadingActivities(false);
     }
-  };
+  }, [user]);
 
-  const handleSmartClassify = async () => {
-    if (!description.trim() || description.length < 5) return;
-    
-    setIsClassifying(true);
-    try {
-      const result = await classifyActivityType(description);
-      if (result) {
-        setAiSuggestion(result);
-        // We don't auto-set the type anymore, we let the user confirm
-      }
-    } catch (err) {
-      console.error('Classification failed:', err);
-    } finally {
-      setIsClassifying(false);
-    }
-  };
+  useEffect(() => {
+    void fetchUserData();
+  }, [fetchUserData]);
 
-  const applySuggestion = () => {
-    if (aiSuggestion) {
-      setType(aiSuggestion.type);
-      setAiSuggestion(null);
-    }
-  };
-
-  const getPointsForType = (t) => {
+  const getScoreForType = (t) => {
     switch(t) {
       case 'learning': return 10;
       case 'practice': return 20;
@@ -91,54 +106,112 @@ export default function Dashboard() {
     if (!description.trim() || !supabase) return;
     
     setIsSubmitting(true);
-    const points = getPointsForType(type);
+    setLastResult(null);
+    console.log('Starting activity logging for:', description);
 
     try {
-      const { error } = await supabase
+      // 1. AI classifies the activity
+      const aiResult = await classifyActivityType(description);
+      console.log('AI Result in Dashboard:', aiResult);
+      
+      const type = aiResult?.type || 'learning';
+      const skills = aiResult?.skills || [];
+      const score = getScoreForType(type);
+
+      // 2. Insert into database
+      const { data: insertedData, error } = await supabase
         .from('activities')
         .insert([{
           user_id: user.id,
           description,
           type,
-          points,
-          metadata: aiSuggestion?.skills ? { skills: aiSuggestion.skills } : {}
-        }]);
+          score,
+          metadata: skills.length > 0 ? { skills } : {}
+        }])
+        .select(); // Select to confirm it actually exists in the DB
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase Insert Error:', error);
+        alert(`❌ Database Error: ${error.message}\nCode: ${error.code}`);
+        throw error;
+      }
       
+      if (!insertedData || insertedData.length === 0) {
+        console.error('Insert returned no data - RLS or Trigger might be blocking it.');
+        alert('⚠️ Activity was sent but not saved. Please check your Supabase RLS policies.');
+        return;
+      }
+
+      console.log('Log successful, inserted:', insertedData[0]);
+      
+      console.log('Log successful, refreshing UI...');
+      setLastResult({ type, score, skills });
       await fetchUserData();
       setDescription('');
-      setAiSuggestion(null);
-      setType('learning');
     } catch (err) {
-      console.error(err);
-      alert('Failed to log activity.');
+      console.error('Submit Error Details:', err);
+      // Construct a more detailed error message
+      const errorMsg = err.message || 'Unknown network error';
+      alert(`⚠️ Failed to log activity.\n\nError: ${errorMsg}\n\nCheck if the AI Proxy Server is running at http://127.0.0.1:3001`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const displayName = profile?.full_name || user?.user_metadata?.username || 'Student';
+
   return (
     <div className="container animate-fade-in">
       <header className="dashboard-header mb-8">
         <div>
-          <h1 className="greeting">Keep pushing, {user?.user_metadata?.username || 'Student'}!</h1>
+          <h1 className="greeting">Keep pushing, {displayName}!</h1>
           <p className="subtitle">Track today's effort to see your progress tomorrow.</p>
         </div>
-        
-        <div className="stats-cards">
-          <div className="stat-card glass-panel">
-            <div className="stat-icon learning-bg"><Zap size={24} color="var(--learning-color)" /></div>
-            <div className="stat-info">
-              <span className="stat-value">{stats.totalPoints}</span>
-              <span className="stat-label">Total Points</span>
-            </div>
-          </div>
-        </div>
+        <button onClick={() => { if(window.confirm('Sign out?')) signOut(); }} className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginTop: '10px' }}>
+          <LogOut size={14} /> Sign Out
+        </button>
       </header>
 
-      <div className="grid grid-cols-3 gap-8">
-        <div className="col-span-1 lg:col-span-2">
+      {/* Score Hero Section */}
+      <div className="score-hero-row">
+        <Motion.div className="glass-panel score-hero-card" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
+          <div className="score-ring">
+            <Zap size={32} />
+          </div>
+          <div className="score-info">
+            <span className="score-big">{stats.totalScore}</span>
+            <span className="score-label">Ahead Score</span>
+          </div>
+          {stats.rank > 0 && (
+            <div className="rank-badge-hero">
+              <TrendingUp size={14} /> #{stats.rank}
+            </div>
+          )}
+        </Motion.div>
+
+        <Motion.div className="glass-panel streak-card" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, delay: 0.1 }}>
+          <div className="streak-icon">
+            <Flame size={28} />
+          </div>
+          <div className="streak-info">
+            <span className="streak-big">{stats.streak}</span>
+            <span className="streak-label">Day Streak</span>
+          </div>
+        </Motion.div>
+
+        {profile?.goal && (
+          <Motion.div className="glass-panel goal-card-mini" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, delay: 0.2 }}>
+            <Sparkles size={20} color="var(--primary-color)" />
+            <div>
+              <span className="goal-mini-label">Your Goal</span>
+              <span className="goal-mini-text">{profile.goal}</span>
+            </div>
+          </Motion.div>
+        )}
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="dashboard-main">
           {/* Tracker Form */}
           <section className="glass-panel mb-8">
             <h2 className="section-title">Log Activity</h2>
@@ -153,67 +226,84 @@ export default function Dashboard() {
                     value={description}
                     onChange={(e) => {
                       setDescription(e.target.value);
-                      if (aiSuggestion) setAiSuggestion(null);
+                      if (lastResult) setLastResult(null);
                     }}
-                    onBlur={handleSmartClassify}
                   />
-                  {isClassifying && (
-                    <div className="classifying-badge">
-                      <div className="loading-spinner"></div>
-                      Analyzing...
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* AI Suggestion Display */}
-              {aiSuggestion && (
-                <div className="ai-suggestion-panel">
+              {lastResult && (
+                <Motion.div className="ai-suggestion-panel" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
                   <div className="ai-suggestion-header">
-                    <Sparkles size={14} /> AI Analysis
+                    <Sparkles size={14} /> AI Classified
                   </div>
                   <div className="ai-suggestion-content">
                     <p className="text-sm">
-                      Identified as <strong className={`text-${aiSuggestion.type}`}>{aiSuggestion.type}</strong>
+                      Classified as <strong className={`text-${lastResult.type}`}>{lastResult.type}</strong>
+                      {' — '}<strong>+{lastResult.score} score</strong>
                     </p>
-                    {aiSuggestion.skills?.length > 0 && (
+                    {lastResult.skills?.length > 0 && (
                       <div className="skills-container">
-                        {aiSuggestion.skills.map((skill, index) => (
+                        {lastResult.skills.map((skill, index) => (
                           <span key={index} className="skill-tag">{skill}</span>
                         ))}
                       </div>
                     )}
                   </div>
-                  <div className="ai-suggestion-actions">
-                    <button type="button" className="btn btn-sm btn-confirm" onClick={applySuggestion}>
-                      Apply Suggestion
-                    </button>
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => setAiSuggestion(null)}>
-                      <X size={14} /> Clear
-                    </button>
-                  </div>
-                </div>
+                </Motion.div>
               )}
 
-              <div className="type-selectors mt-6">
-                <label className={`type-btn ${type === 'learning' ? 'active-learning' : ''}`}>
-                  <input type="radio" value="learning" checked={type === 'learning'} onChange={(e) => setType(e.target.value)} hidden />
-                  <BookOpen size={18} /> Learning (10 pts)
-                </label>
-                <label className={`type-btn ${type === 'practice' ? 'active-practice' : ''}`}>
-                  <input type="radio" value="practice" checked={type === 'practice'} onChange={(e) => setType(e.target.value)} hidden />
-                  <Code size={18} /> Practice (20 pts)
-                </label>
-                <label className={`type-btn ${type === 'project' ? 'active-project' : ''}`}>
-                  <input type="radio" value="project" checked={type === 'project'} onChange={(e) => setType(e.target.value)} hidden />
-                  <Terminal size={18} /> Project (30 pts)
-                </label>
-              </div>
+              <div className="button-group-row mt-6">
+                <button type="submit" className="btn btn-primary" disabled={isSubmitting || !description}>
+                  {isSubmitting ? (
+                    <><div className="loading-spinner"></div> Classifying...</>
+                  ) : (
+                    <>Log Activity <CheckCircle2 size={18} /></>
+                  )}
+                </button>
 
-              <button type="submit" className="btn btn-primary mt-6" disabled={isSubmitting || !description}>
-                {isSubmitting ? 'Logging...' : 'Log Activity'}
-                {!isSubmitting && <CheckCircle2 size={18} />}
-              </button>
+                {isSubmitting && (
+                  <button 
+                    type="button" 
+                    className="btn btn-outline"
+                    onClick={async () => {
+                      if (!window.confirm('Skip AI classification and log as "Learning" (+10)?')) return;
+                      
+                      console.log('User skipped AI, logging manually');
+                      abortActiveClassification();
+                      setIsSubmitting(true);
+                      
+                      try {
+                        const { data: inserted, error } = await supabase
+                          .from('activities')
+                          .insert([{
+                            user_id: user.id,
+                            description,
+                            type: 'learning',
+                            score: 10,
+                            metadata: { skipped_ai: true }
+                          }])
+                          .select();
+                          
+                        if (error) throw error;
+                        if (!inserted || inserted.length === 0) throw new Error('Insert failed - no data returned');
+
+                        console.log('Manual log successful');
+                        await fetchUserData();
+                        setDescription('');
+                        setLastResult({ type: 'learning', score: 10, skills: [] });
+                      } catch (err) {
+                        console.error('Manual log error:', err);
+                        alert('❌ Manual log failed: ' + err.message);
+                      } finally {
+                        setIsSubmitting(false);
+                      }
+                    }}
+                  >
+                    Skip AI & Log Now
+                  </button>
+                )}
+              </div>
             </form>
           </section>
 
@@ -224,8 +314,14 @@ export default function Dashboard() {
               <div className="skeleton" style={{ height: '80px', marginBottom: '10px' }}></div>
             ) : activities.length > 0 ? (
               <ul className="activity-list">
-                {activities.map(act => (
-                  <li key={act.id} className="activity-item">
+                {activities.map((act, i) => (
+                  <Motion.li
+                    key={act.id}
+                    className="activity-item"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                  >
                     <div className={`activity-icon bg-${act.type}`}>
                       {act.type === 'learning' && <BookOpen size={16} />}
                       {act.type === 'practice' && <Code size={16} />}
@@ -235,17 +331,17 @@ export default function Dashboard() {
                       <p className="activity-desc">{act.description}</p>
                       {act.metadata?.skills && (
                         <div className="activity-skills">
-                          {act.metadata.skills.map((s, i) => (
-                            <span key={i} className="activity-skill-tag">{s}</span>
+                          {act.metadata.skills.map((s, j) => (
+                            <span key={j} className="activity-skill-tag">{s}</span>
                           ))}
                         </div>
                       )}
                       <span className="activity-time">{new Date(act.created_at).toLocaleString()}</span>
                     </div>
-                    <div className="activity-points">
-                      +{act.points} pts
+                    <div className="activity-score">
+                      +{act.score} score
                     </div>
-                  </li>
+                  </Motion.li>
                 ))}
               </ul>
             ) : (
@@ -254,20 +350,19 @@ export default function Dashboard() {
           </section>
         </div>
 
-        {/* Sidebar Space */}
-        <div className="col-span-1">
-           <div className="glass-panel info-panel">
-              <h3>How it works</h3>
-              <ul className="info-list">
-                 <li><Target size={16}/> <span>Learn: Watching tutorials, reading docs.</span></li>
-                 <li><Code size={16}/> <span>Practice: Solving problems, fixing bugs.</span></li>
-                 <li><Terminal size={16}/> <span>Project: Building real applications.</span></li>
-              </ul>
-              <p className="mt-4 text-xs">Points are assigned automatically based on the activity type. Stand out consistency gets rewarded.</p>
-           </div>
+        <div className="dashboard-sidebar">
+          <div className="glass-panel info-panel">
+            <h3>How it works</h3>
+            <ul className="info-list">
+              <li><Sparkles size={16}/> <span>Just describe what you did — AI handles the rest.</span></li>
+              <li><BookOpen size={16}/> <span>Learning: 10 score</span></li>
+              <li><Code size={16}/> <span>Practice: 20 score</span></li>
+              <li><Terminal size={16}/> <span>Project: 30 score</span></li>
+            </ul>
+            <p className="mt-4 text-xs">Score is assigned automatically by Mistral AI. Consistency gets rewarded.</p>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

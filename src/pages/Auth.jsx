@@ -1,23 +1,20 @@
-import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
+import { useAuth } from '../context/auth-context';
+import { supabase } from '../lib/supabase';
 
 export default function Auth() {
-  const { user } = useAuth();
+  const { user, profile, loading: authLoading, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  if (user) return <Navigate to="/" />;
-
-  React.useEffect(() => {
-    // Check for error parameters in the URL (from failed OAuth redirect)
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const errorMsg = params.get('error_description');
+
     if (errorMsg) {
       setError(errorMsg.replace(/\+/g, ' '));
-      // Clean up the URL to avoid showing the error again on refresh
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
@@ -27,27 +24,42 @@ export default function Auth() {
       setError('Supabase is not configured. Please check your .env file.');
       return;
     }
-    
+
     try {
       setLoading(true);
       setError(null);
-      
-      const { error } = await supabase.auth.signInWithOAuth({
+
+      const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // Dynamic redirect to current origin (e.g. http://localhost:5173)
-          redirectTo: window.location.origin
-        }
+          redirectTo: window.location.origin,
+        },
       });
-      
-      if (error) throw error;
-      
+
+      if (authError) throw authError;
     } catch (err) {
       console.error('Login error:', err);
       setError(err.message);
       setLoading(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="auth-container">
+        <div className="auth-card glass-panel animate-fade-in">
+          <div className="loading-block">
+            <div className="loading-spinner"></div>
+            <p>Checking your session...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to={profile?.onboarded ? '/' : '/onboarding'} replace />;
+  }
 
   return (
     <div className="auth-container">
@@ -67,9 +79,9 @@ export default function Auth() {
         )}
 
         <div className="auth-action-area">
-          <button 
-            onClick={handleGoogleLogin} 
-            className="btn btn-primary" 
+          <button
+            onClick={handleGoogleLogin}
+            className="btn btn-primary"
             style={{ width: '100%', padding: '16px', fontSize: '1.1rem', gap: '12px' }}
             disabled={loading}
           >
@@ -87,21 +99,26 @@ export default function Auth() {
               </>
             )}
           </button>
-          
+
           <p style={{ marginTop: '16px', fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
             Fast, secure, and passwordless authentication.
           </p>
         </div>
 
         <div className="auth-footer" style={{ marginTop: '32px', textAlign: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--primary-color)', fontSize: '0.9rem', fontWeight: '500' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--primary-color)', fontSize: '0.9rem', fontWeight: '500', marginBottom: '16px' }}>
             <Sparkles size={16} />
             Elevate your learning journey
           </div>
+          <button
+            onClick={() => signOut()}
+            className="btn-link"
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}
+          >
+            Sign out of current session
+          </button>
         </div>
       </div>
     </div>
   );
 }
-
-

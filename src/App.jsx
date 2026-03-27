@@ -1,43 +1,55 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/auth-context';
 import Navigation from './components/Navigation';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Leaderboard from './pages/Leaderboard';
+import Onboarding from './pages/Onboarding';
+import Roadmap from './pages/Roadmap';
 
-// Protected Route Component
+const FullPageLoader = () => (
+  <div className="page-loader">
+    <div className="loading-spinner"></div>
+  </div>
+);
+
 const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
-  
-  // Check if we are in the middle of an OAuth redirect (code or access_token in URL)
-  const isAuthRedirect = window.location.search.includes('code=') || 
-                         window.location.hash.includes('access_token=');
+  const { user, profile, loading } = useAuth();
 
-  if (loading || isAuthRedirect) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="loading-spinner"></div>
-      </div>
-    );
-  }
+  if (loading || (user && profile === undefined)) return <FullPageLoader />;
+  if (!user) return <Navigate to="/auth" replace />;
+  if (!profile?.onboarded) return <Navigate to="/onboarding" replace />;
 
-  if (!user) return <Navigate to="/auth" />;
   return children;
 };
 
+const OnboardingRoute = ({ children }) => {
+  const { user, profile, loading } = useAuth();
+
+  if (loading || (user && profile === undefined)) return <FullPageLoader />;
+  if (!user) return <Navigate to="/auth" replace />;
+  if (profile?.onboarded) return <Navigate to="/" replace />;
+
+  return children;
+};
 
 function AppRoutes() {
-  const { user } = useAuth();
+  const { user, profile, loading } = useAuth();
+  const showNav = !loading && user && profile?.onboarded;
 
   return (
     <BrowserRouter>
-      {user && <Navigation />}
+      {showNav && <Navigation />}
       <div className="main-content">
         <Routes>
-          <Route path="/auth" element={user ? <Navigate to="/" /> : <Auth />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/onboarding" element={<OnboardingRoute><Onboarding /></OnboardingRoute>} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
+          <Route path="/roadmap" element={<ProtectedRoute><Roadmap /></ProtectedRoute>} />
+          <Route path="*" element={<Navigate to={user ? '/' : '/auth'} replace />} />
         </Routes>
       </div>
     </BrowserRouter>
