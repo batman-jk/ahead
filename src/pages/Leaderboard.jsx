@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/auth-context';
 import { motion as Motion } from 'framer-motion';
-import { Trophy, Medal, Award, Search } from 'lucide-react';
+import { Award, Medal, Search, Trophy } from 'lucide-react';
+import { useAuth } from '../context/auth-context';
+import { supabase } from '../lib/supabase';
+import { TELANGANA_STATE } from '../lib/telanganaColleges';
 
 const FILTERS = [
   { id: 'college', label: 'My College' },
-  { id: 'state', label: 'My State' },
+  { id: 'state', label: TELANGANA_STATE },
   { id: 'india', label: 'India' },
   { id: 'worldwide', label: 'Worldwide' },
 ];
@@ -23,8 +24,9 @@ export default function Leaderboard() {
       setLoading(false);
       return;
     }
-    
+
     setLoading(true);
+
     try {
       let query = supabase
         .from('profiles')
@@ -32,34 +34,39 @@ export default function Leaderboard() {
         .order('total_score', { ascending: false })
         .limit(50);
 
-      // Apply filters
       if (activeFilter === 'college' && profile?.college) {
         query = query.eq('college', profile.college);
-      } else if (activeFilter === 'state' && profile?.state) {
-        query = query.eq('state', profile.state);
+      } else if (activeFilter === 'state') {
+        query = query.eq('state', TELANGANA_STATE);
       }
-      // 'india' and 'worldwide' show all (no country field yet, so same for now)
 
       const { data, error } = await query;
       if (error) throw error;
-      if (data) setLeaders(data);
+
+      setLeaders(data || []);
     } catch (err) {
-      console.error(err);
+      console.error('Leaderboard fetch error:', err);
+      setLeaders([]);
     } finally {
       setLoading(false);
     }
-  }, [activeFilter, profile?.college, profile?.state]);
+  }, [activeFilter, profile?.college]);
 
   useEffect(() => {
     void fetchLeaders();
   }, [fetchLeaders]);
 
   const filteredLeaders = searchQuery
-    ? leaders.filter(l =>
-        (l.username || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (l.full_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+    ? leaders.filter((leader) =>
+        [leader.username, leader.full_name, leader.college]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : leaders;
+  const showPolicyHint =
+    activeFilter !== 'college' &&
+    filteredLeaders.length === 1 &&
+    filteredLeaders[0]?.id === user?.id;
 
   const getInitials = (leader) => {
     if (leader.full_name) return leader.full_name[0]?.toUpperCase();
@@ -75,32 +82,45 @@ export default function Leaderboard() {
         <p>See where you stand among the top learners.</p>
       </div>
 
-      {/* Filter Tabs */}
+      <div className="leaderboard-note glass-panel">
+        <p>
+          Telangana, India, and Worldwide currently show the same ranking pool while `.ahead`
+          is still rolling out beyond Telangana colleges.
+        </p>
+      </div>
+
+      {showPolicyHint && (
+        <div className="leaderboard-hint glass-panel">
+          <p>
+            If you expected other logged-in accounts here, your live Supabase project is still using the old RLS policy.
+            Run <code>leaderboard_logs_patch.sql</code> in the Supabase SQL Editor.
+          </p>
+        </div>
+      )}
+
       <div className="filter-tabs">
-        {FILTERS.map(f => (
+        {FILTERS.map((filter) => (
           <button
-            key={f.id}
-            className={`filter-tab ${activeFilter === f.id ? 'active' : ''}`}
-            onClick={() => setActiveFilter(f.id)}
+            key={filter.id}
+            className={`filter-tab ${activeFilter === filter.id ? 'active' : ''}`}
+            onClick={() => setActiveFilter(filter.id)}
           >
-            {f.label}
+            {filter.label}
           </button>
         ))}
       </div>
 
-      {/* Search Bar */}
       <div className="search-bar glass-panel">
         <Search size={18} color="var(--text-secondary)" />
         <input
           type="text"
-          placeholder="Search by name..."
+          placeholder="Search by student or college..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(event) => setSearchQuery(event.target.value)}
           className="search-input"
         />
       </div>
 
-      {/* Leaderboard Table */}
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 24 }}>
@@ -127,9 +147,9 @@ export default function Leaderboard() {
                   transition={{ delay: index * 0.03 }}
                 >
                   <td className="rank-col">
-                    {index === 0 && <span className="rank-badge gold"><Trophy size={16}/> 1</span>}
-                    {index === 1 && <span className="rank-badge silver"><Medal size={16}/> 2</span>}
-                    {index === 2 && <span className="rank-badge bronze"><Award size={16}/> 3</span>}
+                    {index === 0 && <span className="rank-badge gold"><Trophy size={16} /> 1</span>}
+                    {index === 1 && <span className="rank-badge silver"><Medal size={16} /> 2</span>}
+                    {index === 2 && <span className="rank-badge bronze"><Award size={16} /> 3</span>}
                     {index > 2 && <span className="rank-text">{index + 1}</span>}
                   </td>
                   <td className="user-col">

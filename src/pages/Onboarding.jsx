@@ -1,19 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/auth-context';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { Target, Cpu, GraduationCap, ChevronRight, ChevronLeft, Sparkles, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Cpu, GraduationCap, Search, Sparkles, Target } from 'lucide-react';
+import { useAuth } from '../context/auth-context';
+import { useUi } from '../context/ui-context';
+import { supabase } from '../lib/supabase';
+import { TELANGANA_COLLEGES, TELANGANA_STATE } from '../lib/telanganaColleges';
 
 const GOALS = [
-  { id: 'faang', label: 'Get a Job at FAANG', icon: '🚀' },
-  { id: 'gate', label: 'Crack GATE', icon: '🎓' },
-  { id: 'startup', label: 'Build a Startup', icon: '💡' },
-  { id: 'fullstack', label: 'Become a Full Stack Dev', icon: '⚡' },
-  { id: 'ml', label: 'Master Machine Learning', icon: '🤖' },
-  { id: 'competitive', label: 'Competitive Programming', icon: '🏆' },
-  { id: 'placement', label: 'Crack Campus Placements', icon: '🎯' },
-  { id: 'freelance', label: 'Start Freelancing', icon: '💻' },
+  { id: 'faang', label: 'Get a Job at FAANG', icon: 'Rocket' },
+  { id: 'gate', label: 'Crack GATE', icon: 'Cap' },
+  { id: 'startup', label: 'Build a Startup', icon: 'Idea' },
+  { id: 'fullstack', label: 'Become a Full Stack Dev', icon: 'Bolt' },
+  { id: 'ml', label: 'Master Machine Learning', icon: 'Bot' },
+  { id: 'competitive', label: 'Competitive Programming', icon: 'Cup' },
+  { id: 'placement', label: 'Crack Campus Placements', icon: 'Target' },
+  { id: 'freelance', label: 'Start Freelancing', icon: 'Laptop' },
 ];
 
 const SKILLS = [
@@ -33,37 +35,75 @@ const pageVariants = {
 
 export default function Onboarding() {
   const { user, refreshProfile, signOut } = useAuth();
+  const { confirm, showToast } = useUi();
   const navigate = useNavigate();
+  const collegeDropdownRef = useRef(null);
 
   const [step, setStep] = useState(1);
   const [goal, setGoal] = useState('');
   const [customGoal, setCustomGoal] = useState('');
-  const [selectedSkills, setSelectedSkills] = useState({}); // { skillName: proficiency }
+  const [selectedSkills, setSelectedSkills] = useState({});
   const [college, setCollege] = useState('');
-  const [state, setState] = useState('');
+  const [collegeSearch, setCollegeSearch] = useState('');
+  const [collegeDropdownOpen, setCollegeDropdownOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const toggleSkill = (skill) => {
-    setSelectedSkills(prev => {
-      if (prev[skill]) {
-        const copy = { ...prev };
-        delete copy[skill];
-        return copy;
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (collegeDropdownRef.current && !collegeDropdownRef.current.contains(event.target)) {
+        setCollegeDropdownOpen(false);
       }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleSkill = (skill) => {
+    setSelectedSkills((prev) => {
+      if (prev[skill]) {
+        const next = { ...prev };
+        delete next[skill];
+        return next;
+      }
+
       return { ...prev, [skill]: 'Beginner' };
     });
   };
 
   const setProficiency = (skill, level) => {
-    setSelectedSkills(prev => ({ ...prev, [skill]: level }));
+    setSelectedSkills((prev) => ({ ...prev, [skill]: level }));
   };
 
-  const finalGoal = goal === 'custom' ? customGoal : GOALS.find(g => g.id === goal)?.label || '';
+  const handleCollegeInput = (value) => {
+    setCollegeSearch(value);
+    setCollegeDropdownOpen(true);
+
+    const exactCollege = TELANGANA_COLLEGES.find(
+      (collegeName) => collegeName.toLowerCase() === value.trim().toLowerCase()
+    );
+
+    setCollege(exactCollege || '');
+  };
+
+  const handleCollegeSelect = (selectedCollege) => {
+    setCollege(selectedCollege);
+    setCollegeSearch(selectedCollege);
+    setCollegeDropdownOpen(false);
+  };
+
+  const filteredColleges = TELANGANA_COLLEGES.filter((collegeName) =>
+    collegeName.toLowerCase().includes(collegeSearch.trim().toLowerCase())
+  );
+
+  const finalGoal = goal === 'custom'
+    ? customGoal.trim()
+    : GOALS.find((goalOption) => goalOption.id === goal)?.label || '';
 
   const canProceed = () => {
-    if (step === 1) return !!finalGoal;
+    if (step === 1) return Boolean(finalGoal);
     if (step === 2) return Object.keys(selectedSkills).length > 0;
-    if (step === 3) return college.trim() && state.trim();
+    if (step === 3) return Boolean(college);
     return false;
   };
 
@@ -80,12 +120,12 @@ export default function Onboarding() {
           id: user.id,
           goal: finalGoal,
           skills: skillsArray,
-          college: college.trim(),
-          state: state.trim(),
+          college,
+          state: TELANGANA_STATE,
           onboarded: true,
           avatar_url: user.user_metadata?.avatar_url || null,
           full_name: user.user_metadata?.full_name || null,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         }, { onConflict: 'id' });
 
       if (error) throw error;
@@ -94,27 +134,46 @@ export default function Onboarding() {
       navigate('/');
     } catch (err) {
       console.error('Onboarding error:', err);
-      alert('Failed to save profile. Please try again.');
+      showToast({
+        title: 'Profile save failed',
+        description: 'Please try again.',
+        tone: 'error',
+      });
     } finally {
       setSaving(false);
     }
   };
 
+  const handleSignOut = async () => {
+    const shouldSignOut = await confirm({
+      title: 'Sign out before finishing onboarding?',
+      description: 'Your progress on this screen will not be saved.',
+      confirmLabel: 'Sign out',
+      tone: 'warning',
+    });
+
+    if (!shouldSignOut) return;
+    await signOut();
+  };
+
   return (
     <div className="onboarding-container">
-      <button 
-        onClick={() => { if(window.confirm('Sign out?')) signOut(); }} 
-        className="btn btn-ghost btn-sm" 
+      <button
+        onClick={() => void handleSignOut()}
+        className="btn btn-ghost btn-sm"
         style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 100 }}
       >
         Sign Out
       </button>
+
       <div className="onboarding-card glass-panel">
-        {/* Progress bar */}
         <div className="onboarding-progress">
-          {[1, 2, 3].map(s => (
-            <div key={s} className={`progress-step ${step >= s ? 'active' : ''} ${step > s ? 'done' : ''}`}>
-              {step > s ? <Check size={14} /> : s}
+          {[1, 2, 3].map((progressStep) => (
+            <div
+              key={progressStep}
+              className={`progress-step ${step >= progressStep ? 'active' : ''} ${step > progressStep ? 'done' : ''}`}
+            >
+              {step > progressStep ? <Check size={14} /> : progressStep}
             </div>
           ))}
           <div className="progress-line">
@@ -123,31 +182,38 @@ export default function Onboarding() {
         </div>
 
         <AnimatePresence mode="wait">
-          {/* Step 1: Goal */}
           {step === 1 && (
-            <Motion.div key="step1" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.3 }} className="onboarding-step">
+            <Motion.div
+              key="step1"
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{ duration: 0.3 }}
+              className="onboarding-step"
+            >
               <div className="step-header">
                 <Target size={28} className="step-icon" />
-                <h2>What's your ultimate goal?</h2>
+                <h2>What is your ultimate goal?</h2>
                 <p>This helps us personalize your learning roadmap.</p>
               </div>
 
               <div className="goal-grid">
-                {GOALS.map(g => (
+                {GOALS.map((goalOption) => (
                   <button
-                    key={g.id}
-                    className={`goal-card ${goal === g.id ? 'selected' : ''}`}
-                    onClick={() => { setGoal(g.id); setCustomGoal(''); }}
+                    key={goalOption.id}
+                    className={`goal-card ${goal === goalOption.id ? 'selected' : ''}`}
+                    onClick={() => { setGoal(goalOption.id); setCustomGoal(''); }}
                   >
-                    <span className="goal-emoji">{g.icon}</span>
-                    <span className="goal-label">{g.label}</span>
+                    <span className="goal-emoji">{goalOption.icon}</span>
+                    <span className="goal-label">{goalOption.label}</span>
                   </button>
                 ))}
                 <button
                   className={`goal-card ${goal === 'custom' ? 'selected' : ''}`}
                   onClick={() => setGoal('custom')}
                 >
-                  <span className="goal-emoji">✨</span>
+                  <span className="goal-emoji">Spark</span>
                   <span className="goal-label">Something else</span>
                 </button>
               </div>
@@ -158,7 +224,7 @@ export default function Onboarding() {
                     className="input-field"
                     placeholder="Describe your goal..."
                     value={customGoal}
-                    onChange={(e) => setCustomGoal(e.target.value)}
+                    onChange={(event) => setCustomGoal(event.target.value)}
                     autoFocus
                   />
                 </Motion.div>
@@ -166,9 +232,16 @@ export default function Onboarding() {
             </Motion.div>
           )}
 
-          {/* Step 2: Skills */}
           {step === 2 && (
-            <Motion.div key="step2" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.3 }} className="onboarding-step">
+            <Motion.div
+              key="step2"
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{ duration: 0.3 }}
+              className="onboarding-step"
+            >
               <div className="step-header">
                 <Cpu size={28} className="step-icon" />
                 <h2>What do you already know?</h2>
@@ -176,7 +249,7 @@ export default function Onboarding() {
               </div>
 
               <div className="skills-grid">
-                {SKILLS.map(skill => (
+                {SKILLS.map((skill) => (
                   <div key={skill} className={`skill-card ${selectedSkills[skill] ? 'selected' : ''}`}>
                     <button className="skill-name-btn" onClick={() => toggleSkill(skill)}>
                       {selectedSkills[skill] && <Check size={14} />}
@@ -184,13 +257,13 @@ export default function Onboarding() {
                     </button>
                     {selectedSkills[skill] && (
                       <div className="proficiency-selector">
-                        {PROFICIENCY.map(p => (
+                        {PROFICIENCY.map((proficiency) => (
                           <button
-                            key={p}
-                            className={`prof-btn ${selectedSkills[skill] === p ? 'active' : ''}`}
-                            onClick={() => setProficiency(skill, p)}
+                            key={proficiency}
+                            className={`prof-btn ${selectedSkills[skill] === proficiency ? 'active' : ''}`}
+                            onClick={() => setProficiency(skill, proficiency)}
                           >
-                            {p[0]}
+                            {proficiency[0]}
                           </button>
                         ))}
                       </div>
@@ -201,40 +274,69 @@ export default function Onboarding() {
             </Motion.div>
           )}
 
-          {/* Step 3: College */}
           {step === 3 && (
-            <Motion.div key="step3" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.3 }} className="onboarding-step">
+            <Motion.div
+              key="step3"
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{ duration: 0.3 }}
+              className="onboarding-step"
+            >
               <div className="step-header">
                 <GraduationCap size={28} className="step-icon" />
                 <h2>Your college details</h2>
-                <p>Used for college-level leaderboards.</p>
+                <p>College rankings are limited to Telangana campuses for now.</p>
               </div>
 
               <div className="college-form">
                 <div className="input-group">
-                  <label className="input-label">College / University Name</label>
-                  <input
-                    className="input-field"
-                    placeholder="e.g., IIT Bombay"
-                    value={college}
-                    onChange={(e) => setCollege(e.target.value)}
-                  />
-                </div>
-                <div className="input-group">
                   <label className="input-label">State</label>
-                  <input
-                    className="input-field"
-                    placeholder="e.g., Maharashtra"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                  />
+                  <div className="state-pill">{TELANGANA_STATE}</div>
+                </div>
+
+                <div className="input-group" ref={collegeDropdownRef}>
+                  <label className="input-label">College</label>
+                  <div className="searchable-select">
+                    <div className="searchable-select-input">
+                      <Search size={16} className="searchable-select-icon" />
+                      <input
+                        className="input-field searchable-input"
+                        placeholder="Search your college..."
+                        value={collegeSearch}
+                        onChange={(event) => handleCollegeInput(event.target.value)}
+                        onFocus={() => setCollegeDropdownOpen(true)}
+                      />
+                    </div>
+
+                    {collegeDropdownOpen && (
+                      <div className="searchable-select-menu">
+                        {filteredColleges.length > 0 ? (
+                          filteredColleges.map((collegeName) => (
+                            <button
+                              key={collegeName}
+                              type="button"
+                              className={`searchable-select-option ${college === collegeName ? 'selected' : ''}`}
+                              onMouseDown={() => handleCollegeSelect(collegeName)}
+                            >
+                              <span>{collegeName}</span>
+                              {college === collegeName && <Check size={14} />}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="searchable-select-empty">No matching Telangana college found.</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <p className="college-helper-text">Choose one college from the Telangana list to unlock college rankings.</p>
                 </div>
               </div>
             </Motion.div>
           )}
         </AnimatePresence>
 
-        {/* Navigation Buttons */}
         <div className="onboarding-actions">
           {step > 1 && (
             <button className="btn btn-outline" onClick={() => setStep(step - 1)}>

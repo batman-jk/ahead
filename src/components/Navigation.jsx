@@ -2,9 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Trophy, Map, LogOut, User, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/auth-context';
+import { useUi } from '../context/ui-context';
 
 export default function Navigation() {
   const { user, profile, signOut } = useAuth();
+  const { confirm } = useUi();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -22,6 +24,14 @@ export default function Navigation() {
   }, []);
 
   const handleLogout = async () => {
+    const shouldSignOut = await confirm({
+      title: 'Sign out now?',
+      description: 'You can return by logging in with Google again.',
+      confirmLabel: 'Sign out',
+      tone: 'warning',
+    });
+
+    if (!shouldSignOut) return;
     await signOut();
   };
 
@@ -70,7 +80,7 @@ export default function Navigation() {
                 {profile?.college && <span className="dropdown-college">{profile.college}</span>}
               </div>
               <div className="dropdown-divider"></div>
-              <button className="dropdown-item danger" onClick={handleLogout}>
+              <button className="dropdown-item danger" onClick={() => void handleLogout()}>
                 <LogOut size={16} /> Sign Out
               </button>
             </div>

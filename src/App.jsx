@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/auth-context';
+import { UiProvider } from './context/UiProvider';
 import Navigation from './components/Navigation';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
@@ -58,9 +59,11 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <UiProvider>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </UiProvider>
   );
 }
 
