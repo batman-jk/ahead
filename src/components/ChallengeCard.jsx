@@ -94,38 +94,80 @@ export default function ChallengeCard({ challenge, onComplete }) {
 
   return (
     <Motion.div 
-      className={`glass-panel challenge-card ${challenge.is_completed ? 'completed' : ''} ${isExpired ? 'expired' : ''}`}
+      className={`challenge-card ${challenge.is_completed ? 'completed' : ''} ${isExpired ? 'expired' : ''}`}
+      style={{
+        background: 'var(--glass-bg)',
+        backdropFilter: 'blur(12px)',
+        borderRadius: '16px',
+        border: '1px solid var(--glass-border)',
+        borderLeft: '4px solid var(--text-primary)',
+        padding: '20px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        transition: 'var(--transition)',
+        position: 'relative',
+        color: 'var(--text-primary)'
+      }}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       layout
     >
-      <div className="challenge-header">
-        <span className={`challenge-type-badge ${challenge.type}`}>
-          {challenge.type === 'daily' ? 'Daily' : 'Weekly'}
+      <div className="challenge-header" style={{ marginBottom: '4px' }}>
+        <span className={`challenge-type-badge ${challenge.type}`} style={{ 
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-secondary)',
+          padding: '4px 10px',
+          borderRadius: '8px',
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          letterSpacing: '0.5px',
+          border: '1px solid var(--panel-border)'
+        }}>
+          {challenge.type === 'daily' ? ' DAILY' : ' WEEKLY'}
         </span>
-        <div className="challenge-xp">
-          <Zap size={14} color="var(--primary-color)" />
+        <div className="challenge-xp" style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Zap size={14} />
           <span>{challenge.xp_reward} XP</span>
         </div>
       </div>
 
-      <h3 className="challenge-title">{challenge.title}</h3>
-      <p className="challenge-desc">{challenge.description}</p>
+      <h3 className="challenge-title" style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1.1rem', margin: 0 }}>{challenge.title}</h3>
+      <p className="challenge-desc" style={{ color: 'var(--text-secondary)', fontWeight: 400, fontSize: '0.9rem', margin: 0, lineHeight: 1.5, opacity: 0.8 }}>{challenge.description}</p>
 
-      <div className="challenge-footer mt-4">
+      <div className="challenge-footer" style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         {challenge.is_completed ? (
-          <div className="challenge-completed-badge">
+          <div className="challenge-completed-badge" style={{ 
+            background: 'rgba(34, 197, 94, 0.1)', 
+            color: '#22c55e', 
+            width: '100%', 
+            padding: '10px', 
+            borderRadius: '12px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            gap: '8px', 
+            fontWeight: 600 
+          }}>
             <CheckCircle2 size={16} /> Completed
           </div>
         ) : (
           <>
-            <div className={`challenge-time ${isExpired ? 'text-red-400' : ''}`}>
+            <div className={`challenge-time ${isExpired ? 'expired' : ''}`} style={{ 
+              color: isExpired ? 'var(--danger-color)' : 'var(--amber-color)',
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
               <Clock size={14} /> <span>{timeLeft}</span>
             </div>
             <button 
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm glow-on-hover"
               onClick={handleMarkAsDone}
               disabled={isCompleting || isExpired}
+              style={{ borderRadius: '12px', padding: '10px 16px', fontWeight: 600 }}
             >
               {isCompleting ? 'Completing...' : 'Mark as Done'}
             </button>

@@ -1,26 +1,56 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  --bg-color: #0a0a0f;
-  --bg-secondary: #111118;
-  --panel-bg: rgba(22, 22, 32, 0.7);
-  --panel-border: rgba(255, 255, 255, 0.07);
-  --text-primary: #f0f2f5;
-  --text-secondary: #8891a4;
-  --primary-color: #7C3AED;
-  --primary-hover: #6D28D9;
-  --primary-glow: rgba(124, 58, 237, 0.25);
-  --accent-color: #06B6D4;
-  --accent-glow: rgba(6, 182, 212, 0.2);
-  --learning-color: #10b981;
-  --practice-color: #3b82f6;
-  --project-color: #8b5cf6;
-  --danger-color: #ef4444;
+  /* Common tokens */
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 8px;
   --radius-full: 999px;
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --success-color: #22c55e;
+  --amber-color: #f59e0b;
+  --danger-color: #ef4444;
+  --learning-color: #10b981;
+  --practice-color: #3b82f6;
+  --project-color: #6366f1; /* Using a neutral indigo/blue for projects */
+}
+
+/* DARK MODE (Default) */
+[data-theme='dark'] {
+  --bg-color: #000000;
+  --bg-secondary: #0a0a0f;
+  --panel-bg: rgba(20, 20, 25, 0.8);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1aa;
+  --primary-color: #ffffff;
+  --primary-hover: #e4e4e7;
+  --primary-glow: rgba(255, 255, 255, 0.15);
+  --accent-color: #ffffff;
+  --accent-glow: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --gradient-bg: radial-gradient(circle at 15% 50%, rgba(255, 255, 255, 0.03), transparent 30%),
+                radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.03), transparent 30%);
+}
+
+/* LIGHT MODE */
+[data-theme='light'] {
+  --bg-color: #ffffff;
+  --bg-secondary: #f4f4f5;
+  --panel-bg: rgba(255, 255, 255, 0.9);
+  --panel-border: rgba(0, 0, 0, 0.1);
+  --text-primary: #000000;
+  --text-secondary: #52525b;
+  --primary-color: #000000;
+  --primary-hover: #18181b;
+  --primary-glow: rgba(0, 0, 0, 0.1);
+  --accent-color: #000000;
+  --accent-glow: rgba(0, 0, 0, 0.05);
+  --glass-bg: rgba(0, 0, 0, 0.02);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --gradient-bg: radial-gradient(circle at 15% 50%, rgba(0, 0, 0, 0.02), transparent 30%),
+                radial-gradient(circle at 85% 20%, rgba(0, 0, 0, 0.02), transparent 30%);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -32,11 +62,9 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  background-image:
-    radial-gradient(circle at 15% 50%, rgba(124, 58, 237, 0.06), transparent 30%),
-    radial-gradient(circle at 85% 20%, rgba(6, 182, 212, 0.06), transparent 30%),
-    radial-gradient(circle at 50% 80%, rgba(124, 58, 237, 0.04), transparent 40%);
+  background-image: var(--gradient-bg);
   background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root { min-height: 100vh; display: flex; flex-direction: column; }
@@ -70,8 +98,9 @@ p { margin-bottom: 1rem; color: var(--text-secondary); }
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary-color), #9333EA);
-  color: white; box-shadow: 0 4px 20px var(--primary-glow);
+  background: var(--text-primary);
+  color: var(--bg-color);
+  box-shadow: 0 4px 20px var(--primary-glow);
 }
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px); box-shadow: 0 8px 30px var(--primary-glow);
@@ -246,8 +275,8 @@ p { margin-bottom: 1rem; color: var(--text-secondary); }
 }
 @keyframes skeleton-loading { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
 .loading-spinner {
-  width: 18px; height: 18px; border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;
+  width: 18px; height: 18px; border: 2px solid var(--panel-border);
+  border-top-color: var(--text-primary); border-radius: 50%; animation: spin 0.8s linear infinite;
 }
 
 /* ===================== NAVIGATION ===================== */
@@ -436,7 +465,8 @@ p { margin-bottom: 1rem; color: var(--text-secondary); }
 }
 .score-ring {
   width: 64px; height: 64px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary-color), #9333EA);
+  background: var(--text-primary);
+  color: var(--bg-color);
   display: flex; align-items: center; justify-content: center; color: white;
   box-shadow: 0 0 30px var(--primary-glow); animation: glow 3s ease-in-out infinite;
 }
@@ -673,7 +703,7 @@ p { margin-bottom: 1rem; color: var(--text-secondary); }
 .top-rank td { font-weight: 600; }
 .rank-col { width: 80px; }
 .user-col { display: flex; align-items: center; gap: 12px; }
-.avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-color), #9333EA); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; flex-shrink: 0; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--bg-color); flex-shrink: 0; }
 .avatar-img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--panel-border); flex-shrink: 0; }
 .user-info { display: flex; flex-direction: column; }
 .username { font-weight: 500; }
@@ -691,8 +721,8 @@ p { margin-bottom: 1rem; color: var(--text-secondary); }
 .roadmap-goals-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
 .roadmap-goal-card { display: flex; align-items: flex-start; gap: 14px; }
 .roadmap-goal-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.roadmap-goal-icon.today { background: linear-gradient(135deg, var(--primary-color), #9333EA); color: white; }
-.roadmap-goal-icon.week { background: linear-gradient(135deg, var(--accent-color), #0891B2); color: white; }
+.roadmap-goal-icon.today { background: var(--text-primary); color: var(--bg-color); }
+.roadmap-goal-icon.week { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--panel-border); }
 .roadmap-goal-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); font-weight: 600; }
 .roadmap-goal-text { font-size: 0.95rem; font-weight: 500; color: var(--text-primary); margin: 0; }
 
@@ -1139,4 +1169,79 @@ p { margin-bottom: 1rem; color: var(--text-secondary); }
   border-radius: var(--radius-sm);
   width: 100%;
   justify-content: center;
+}
+/* ===================== DASHBOARD REDESIGN UTILS ===================== */
+.stats-row-container {
+  display: flex;
+  gap: 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.stat-card-unified {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  transition: var(--transition);
+}
+
+.stat-card-unified:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.challenge-column-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.challenge-grid-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.challenge-grid-weekly {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, auto);
+  gap: 16px;
+}
+
+.glow-on-hover:hover {
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+  transform: translateY(-1px);
+}
+
+.goal-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
+}
+
+.suggestion-pill {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.suggestion-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }

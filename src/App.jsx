@@ -9,6 +9,9 @@ import Dashboard from './pages/Dashboard';
 import Leaderboard from './pages/Leaderboard';
 import Onboarding from './pages/Onboarding';
 import Roadmap from './pages/Roadmap';
+import ResourcesPage from './pages/ResourcesPage';
+import FriendsPage from './pages/FriendsPage';
+import ChatPage from './pages/ChatPage';
 
 const FullPageLoader = () => (
   <div className="page-loader">
@@ -50,6 +53,9 @@ function AppRoutes() {
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
           <Route path="/roadmap" element={<ProtectedRoute><Roadmap /></ProtectedRoute>} />
+          <Route path="/resources" element={<ProtectedRoute><ResourcesPage /></ProtectedRoute>} />
+          <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
+          <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to={user ? '/' : '/auth'} replace />} />
         </Routes>
       </div>

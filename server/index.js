@@ -103,8 +103,8 @@ const normalizeRoadmap = (payload) => {
 const normalizeChallenges = (payload) => {
   const challenges = payload && typeof payload === 'object' ? payload : {};
   return {
-    daily: Array.isArray(challenges.daily) ? challenges.daily.slice(0, 3).map((challenge) => ({ ...challenge, xp_reward: 20 })) : [],
-    weekly: Array.isArray(challenges.weekly) ? challenges.weekly.slice(0, 3).map((challenge) => ({ ...challenge, xp_reward: 50 })) : [],
+    daily: Array.isArray(challenges.daily) ? challenges.daily.slice(0, 2).map((challenge) => ({ ...challenge, xp_reward: 20 })) : [],
+    weekly: Array.isArray(challenges.weekly) ? challenges.weekly.slice(0, 4).map((challenge) => ({ ...challenge, xp_reward: 50 })) : [],
   };
 };
 
@@ -289,7 +289,7 @@ app.post('/api/challenges', async (req, res) => {
       inputs: [
         {
           role: 'user',
-          content: `Generate 3 daily challenges and 3 weekly challenges for a student with Goal: "${goal}" and Skills: "${skillsSummary}".
+          content: `Generate 2 daily challenges and 4 weekly challenges for a student with Goal: "${goal}" and Skills: "${skillsSummary}".
           
 The daily challenges should be small, actionable tasks that can be completed in under an hour.
 The weekly challenges should be larger milestone-style tasks.
@@ -304,7 +304,7 @@ Return your response ONLY as a JSON object with this exact structure:
   ]
 }
 
-Ensure there are exactly 3 items in the daily array and 3 items in the weekly array.`
+Ensure there are exactly 2 items in the daily array and 4 items in the weekly array.`
         }
       ],
     });

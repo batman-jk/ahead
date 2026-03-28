@@ -56,10 +56,30 @@ export function UiProvider({ children }) {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('ahead_theme');
+    if (saved) return saved;
+    return 'dark';
+  });
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      localStorage.setItem('ahead_theme', next);
+      return next;
+    });
+  }, []);
+
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
   const contextValue = useMemo(() => ({
     confirm,
     showToast,
-  }), [confirm, showToast]);
+    theme,
+    toggleTheme,
+  }), [confirm, showToast, theme, toggleTheme]);
 
   const DialogIcon = dialogState ? toneIconMap[dialogState.tone] || Info : Info;
 

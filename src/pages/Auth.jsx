@@ -106,7 +106,7 @@ export default function Auth() {
         </div>
 
         <div className="auth-footer" style={{ marginTop: '32px', textAlign: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--primary-color)', fontSize: '0.9rem', fontWeight: '500', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: '500', marginBottom: '16px' }}>
             <Sparkles size={16} />
             Elevate your learning journey
           </div>

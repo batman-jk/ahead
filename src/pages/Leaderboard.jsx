@@ -77,7 +77,7 @@ export default function Leaderboard() {
   return (
     <div className="container animate-fade-in" style={{ maxWidth: 900, margin: '0 auto' }}>
       <div className="glass-panel" style={{ textAlign: 'center', marginTop: 40 }}>
-        <Trophy size={48} color="var(--primary-color)" style={{ margin: '0 auto 12px' }} />
+        <Trophy size={48} color="var(--text-primary)" style={{ margin: '0 auto 12px' }} />
         <h1>Leaderboard</h1>
         <p>See where you stand among the top learners.</p>
       </div>
