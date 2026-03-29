@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { Users, Search, Bell, Loader2, MessageCircle, X, Check, Clock, UserPlus, ArrowUpRight } from 'lucide-react';
 import { useFriends } from '../hooks/useFriends';
@@ -8,7 +8,7 @@ import { useChatHistory } from '../hooks/useChat';
 import ChatWindow from '../components/chat/ChatWindow';
 
 export default function FriendsPage() {
-  const { incomingRequests, outgoingRequests, recentRequests, loading, searchUsers, sendRequest, acceptRequest, rejectRequest, cancelRequest, friends } = useFriends();
+  const { incomingRequests, outgoingRequests, recentRequests, loading, searchUsers, getSuggestions, sendRequest, acceptRequest, rejectRequest, cancelRequest, friends } = useFriends();
   const { pendingRequests } = useUnreadCount();
   const { history: chatHistory } = useChatHistory();
   
@@ -19,16 +19,35 @@ export default function FriendsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+
+  // Suggestions State
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
+  const searchContainerRef = useRef(null);
   
   // Bell Dropdown State
   const [bellOpen, setBellOpen] = useState(false);
   const bellRef = useRef(null);
 
-  // Close bell on outside click
+  const fetchSuggestions = useCallback(async () => {
+    setFetchingSuggestions(true);
+    try {
+      const data = await getSuggestions();
+      setSuggestions(data);
+    } finally {
+      setFetchingSuggestions(false);
+    }
+  }, [getSuggestions]);
+
+  // Handle outside click for both bell and search suggestions
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (bellRef.current && !bellRef.current.contains(e.target)) {
         setBellOpen(false);
+      }
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setShowSuggestions(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -53,10 +72,13 @@ export default function FriendsPage() {
     }, 400);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, searchUsers]);
+  }, [activeTab, searchQuery, searchUsers]);
 
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
+    if (e.target.value.trim().length > 0) {
+      setShowSuggestions(false);
+    }
   };
 
   const getStatus = (profileId) => {
@@ -106,14 +128,20 @@ export default function FriendsPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '280px', justifyContent: 'flex-end' }}>
-          {/* Search Bar */}
-          <div style={{ position: 'relative', width: '100%', maxWidth: '320px' }}>
+          {/* Search Bar Container */}
+          <div style={{ position: 'relative', width: '100%', maxWidth: '320px' }} ref={searchContainerRef}>
             <Search size={18} color="var(--text-secondary)" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
             <input 
               type="text" 
               placeholder="Search by name or college..."
               value={searchQuery}
               onChange={handleSearchChange}
+              onFocus={() => {
+                if (searchQuery.trim().length === 0) {
+                  setShowSuggestions(true);
+                  void fetchSuggestions();
+                }
+              }}
               style={{
                 width: '100%',
                 padding: '10px 14px 10px 42px',
@@ -127,6 +155,87 @@ export default function FriendsPage() {
               }}
             />
             {searching && <Loader2 className="animate-spin" size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary-color)' }} />}
+
+            {/* Suggestions Dropdown */}
+            <AnimatePresence>
+              {showSuggestions && searchQuery.trim().length === 0 && (
+                <Motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                  transition={{ duration: 0.15 }}
+                  style={{
+                    position: 'absolute',
+                    top: '120%',
+                    left: 0,
+                    right: 0,
+                    background: 'var(--bg-panel)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '14px',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+                    zIndex: 110,
+                    padding: '8px',
+                    backdropFilter: 'blur(12px)'
+                  }}
+                >
+                  <div style={{ padding: '8px 12px 12px', borderBottom: '1px solid var(--border-color)', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Same College Suggestions
+                    </span>
+                  </div>
+                  {fetchingSuggestions ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '18px 12px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                      <Loader2 className="animate-spin" size={16} />
+                      Loading suggestions...
+                    </div>
+                  ) : suggestions.length > 0 ? (
+                    suggestions.map(peer => (
+                      <div 
+                        key={peer.id} 
+                        className="suggestion-item"
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '12px', 
+                          padding: '10px 12px', 
+                          borderRadius: '10px',
+                          cursor: 'default',
+                          transition: 'background 0.2s'
+                        }}
+                      >
+                        <img 
+                          src={peer.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(peer.full_name || peer.username)}&background=random`} 
+                          alt=""
+                          style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {peer.full_name || peer.username}
+                          </h4>
+                          <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {peer.college}
+                          </p>
+                        </div>
+                        <button 
+                           onClick={() => {
+                             void sendRequest(peer.id);
+                             setSuggestions(prev => prev.filter(p => p.id !== peer.id));
+                           }}
+                           className="btn btn-primary"
+                           style={{ padding: '6px 10px', borderRadius: '8px', fontSize: '0.75rem' }}
+                        >
+                           Add
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '16px 12px', color: 'var(--text-secondary)', fontSize: '0.82rem', textAlign: 'center' }}>
+                      No same-college suggestions available right now.
+                    </div>
+                  )}
+                </Motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Bell Icon */}

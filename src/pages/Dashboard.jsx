@@ -446,12 +446,12 @@ export default function Dashboard() {
   const displayName = profile?.full_name || user?.user_metadata?.username || 'Student';
 
   return (
-    <div className="dashboard-redesign-container animate-fade-in" style={{ background: '#0d0d0d', minHeight: '100vh', color: '#fff' }}>
+    <div className="dashboard-redesign-container animate-fade-in" style={{ background: 'var(--bg-color)', minHeight: '100vh', color: 'var(--text-primary)' }}>
       {/* SECTION 1 — Top Bar & Stats */}
       <header className="dashboard-top" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '32px' }}>
         <div className="dashboard-top-left" style={{ textAlign: 'left' }}>
           <h1 className="greeting" style={{ maxWidth: '480px', marginBottom: '8px', fontSize: '2.5rem', fontWeight: 700 }}>Keep pushing, {displayName}!</h1>
-          <p className="subtitle" style={{ color: 'rgba(255,255,255,0.5)', fontSize: '1.1rem', margin: 0 }}>Track today's effort to see your progress tomorrow.</p>
+          <p className="subtitle" style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', margin: 0 }}>Track today's effort to see your progress tomorrow.</p>
         </div>
 
         <div className="stats-row-container">
@@ -606,7 +606,7 @@ export default function Dashboard() {
             </div>
             
             {loadingChallenges || generatingChallenges ? (
-               <div className="loading-block" style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '16px', minHeight: '140px' }}>
+               <div className="loading-block" style={{ background: 'var(--surface-soft)', borderRadius: '16px', minHeight: '140px' }}>
                  <div className="loading-spinner"></div>
                  <p className="text-sm">Synchronizing tasks...</p>
                </div>
@@ -617,7 +617,7 @@ export default function Dashboard() {
                      <ChallengeCard key={challenge.id} challenge={challenge} onComplete={handleChallengeComplete} />
                    ))
                  ) : (
-                   <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '40px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', color: 'rgba(255,255,255,0.3)' }}>
+                   <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '40px', background: 'var(--surface-soft)', borderRadius: '16px', color: 'var(--text-secondary)' }}>
                      Daily challenges refreshed. Come back soon!
                    </div>
                  )}
@@ -634,7 +634,7 @@ export default function Dashboard() {
             </div>
 
             {loadingChallenges || generatingChallenges ? (
-               <div className="loading-block" style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '16px', minHeight: '140px' }}>
+               <div className="loading-block" style={{ background: 'var(--surface-soft)', borderRadius: '16px', minHeight: '140px' }}>
                  <div className="loading-spinner"></div>
                  <p className="text-sm">Preparing milestones...</p>
                </div>
@@ -645,7 +645,7 @@ export default function Dashboard() {
                      <ChallengeCard key={challenge.id} challenge={challenge} onComplete={handleChallengeComplete} />
                    ))
                  ) : (
-                   <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '40px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', color: 'rgba(255,255,255,0.3)' }}>
+                   <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '40px', background: 'var(--surface-soft)', borderRadius: '16px', color: 'var(--text-secondary)' }}>
                      Weekly roadmap cleared! Great job.
                    </div>
                  )}

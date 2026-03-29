@@ -159,16 +159,43 @@ export function useFriends() {
     return { error };
   };
 
-  const removeFriend = async (friendId) => {
+  const removeFriend = async (friend_id) => {
     const { error } = await supabase
       .from('friends')
       .delete()
       .eq('user_id', user.id)
-      .eq('friend_id', friendId);
+      .eq('friend_id', friend_id);
       
     if (!error) await fetchFriendsData();
     return { error };
   };
+
+  const getSuggestions = useCallback(async () => {
+    if (!user || !profile?.college) return [];
+
+    try {
+      const excludeIds = new Set([user.id]);
+      friends.forEach(f => excludeIds.add(f.friend_id || f.profiles?.id));
+      incomingRequests.forEach(r => excludeIds.add(r.sender_id));
+      outgoingRequests.forEach(r => excludeIds.add(r.receiver_id));
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, full_name, avatar_url, college, total_score, total_xp')
+        .eq('college', profile.college)
+        .neq('id', user.id)
+        .order('total_score', { ascending: false, nullsFirst: false })
+        .limit(30);
+
+      if (error) throw error;
+      return (data || [])
+        .filter((peer) => peer?.id && !excludeIds.has(peer.id))
+        .slice(0, 5);
+    } catch (err) {
+      console.error('Error fetching suggestions:', err);
+      return [];
+    }
+  }, [user, profile, friends, incomingRequests, outgoingRequests]);
 
   return {
     friends,
@@ -178,6 +205,7 @@ export function useFriends() {
     loading,
     refresh: fetchFriendsData,
     searchUsers,
+    getSuggestions,
     sendRequest,
     acceptRequest,
     rejectRequest,

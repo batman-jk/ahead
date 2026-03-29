@@ -14,9 +14,7 @@ app.use(express.json());
 
 const apiKey = process.env.VITE_MISTRAL_API_KEY;
 const client = apiKey ? new Mistral({ apiKey }) : null;
-const CORE_AGENT_ID = 'ag_019d2f6ac8307330a96add21f7cc3608';
-const RESOURCE_AGENT_ID = 'ag_019d3402a32c73748a7385af76bc0ae6';
-const AGENT_VERSION = 1;
+const MISTRAL_MODEL = 'mistral-small-latest';
 const RESOURCE_TYPES = ['video', 'book', 'website', 'practice', 'course', 'project'];
 const RESOURCE_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 
@@ -29,26 +27,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 const getConversationText = (response) => {
-  const outputs = Array.isArray(response?.outputs) ? response.outputs : [];
-
-  return outputs
-    .map((output) => {
-      const { content } = output || {};
-      if (typeof content === 'string') return content;
-      if (Array.isArray(content)) {
-        return content
-          .map((part) => {
-            if (typeof part === 'string') return part;
-            if (typeof part?.text === 'string') return part.text;
-            if (typeof part?.content === 'string') return part.content;
-            return '';
-          })
-          .join('\n');
-      }
-      return typeof content === 'object' && content !== null ? JSON.stringify(content) : '';
-    })
-    .join('\n')
-    .trim();
+  return response?.choices?.[0]?.message?.content || '';
 };
 
 const extractJsonPayload = (rawContent) => {
@@ -167,7 +146,7 @@ app.use((req, res, next) => {
 // Activity classification endpoint
 app.post('/api/classify', async (req, res) => {
   const { description } = req.body;
-  console.log(`[AI Proxy] Classifying (Agent): "${description.substring(0, 50)}..."`);
+  console.log(`[AI Proxy] Classifying (Chat): "${description.substring(0, 50)}..."`);
 
   if (!client) {
     console.error('[AI Proxy] Mistral client not initialized.');
@@ -175,10 +154,13 @@ app.post('/api/classify', async (req, res) => {
   }
 
   try {
-    const response = await client.beta.conversations.start({
-      agentId: CORE_AGENT_ID,
-      agentVersion: AGENT_VERSION,
-      inputs: [
+    const response = await client.chat.complete({
+      model: MISTRAL_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an AI activity classifier for a student platform. Categorize activities into "learning", "practice", or "project" and extract technical skills. Return ONLY JSON.'
+        },
         {
           role: 'user',
           content: `Classify the following student activity into exactly one of three categories: "learning", "practice", or "project".
@@ -188,6 +170,7 @@ app.post('/api/classify', async (req, res) => {
           Activity: "${description}"`
         }
       ],
+      responseFormat: { type: 'json_object' }
     });
 
     const content = getConversationText(response);
@@ -209,7 +192,7 @@ app.post('/api/classify', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Mistral Agent Error:', error);
+    console.error('Mistral Chat Error:', error);
     res.status(500).json({ error: 'Failed to classify activity.', type: 'learning', skills: [] });
   }
 });
@@ -217,7 +200,7 @@ app.post('/api/classify', async (req, res) => {
 // Roadmap generation endpoint
 app.post('/api/roadmap', async (req, res) => {
   const { goal, skills } = req.body;
-  console.log(`[AI Proxy] Generating Roadmap (Agent) for: ${goal}`);
+  console.log(`[AI Proxy] Generating Roadmap (Chat) for: ${goal}`);
 
   if (!client) {
     return res.status(500).json({ error: 'Mistral API key not configured on server.' });
@@ -228,10 +211,13 @@ app.post('/api/roadmap', async (req, res) => {
     : 'No specific skills yet';
 
   try {
-    const response = await client.beta.conversations.start({
-      agentId: CORE_AGENT_ID,
-      agentVersion: AGENT_VERSION,
-      inputs: [
+    const response = await client.chat.complete({
+      model: MISTRAL_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a technical mentor. Generate personalized learning roadmaps as JSON.'
+        },
         {
           role: 'user',
           content: `Generate a personalized 8-week learning roadmap for a student with Goal: "${goal}" and Skills: ${skillsSummary}.
@@ -251,6 +237,7 @@ Return your response as a JSON object with this exact structure:
 }`
         }
       ],
+      responseFormat: { type: 'json_object' }
     });
 
     const content = getConversationText(response);
@@ -265,14 +252,15 @@ Return your response as a JSON object with this exact structure:
 
     res.json(result);
   } catch (error) {
-    console.error('Roadmap Agent Error:', error);
+    console.error('Roadmap Chat Error:', error);
     res.status(500).json({ error: 'Failed to generate roadmap.' });
   }
 });
+
 // Challenges generation endpoint
 app.post('/api/challenges', async (req, res) => {
   const { goal, skills } = req.body;
-  console.log(`[AI Proxy] Generating Challenges (Agent) for: ${goal}`);
+  console.log(`[AI Proxy] Generating Challenges (Chat) for: ${goal}`);
 
   if (!client) {
     return res.status(500).json({ error: 'Mistral API key not configured on server.' });
@@ -283,10 +271,13 @@ app.post('/api/challenges', async (req, res) => {
     : 'No specific skills yet';
 
   try {
-    const response = await client.beta.conversations.start({
-      agentId: CORE_AGENT_ID,
-      agentVersion: AGENT_VERSION,
-      inputs: [
+    const response = await client.chat.complete({
+      model: MISTRAL_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a motivation coach for students. Generate technical challenges as JSON.'
+        },
         {
           role: 'user',
           content: `Generate 2 daily challenges and 4 weekly challenges for a student with Goal: "${goal}" and Skills: "${skillsSummary}".
@@ -307,6 +298,7 @@ Return your response ONLY as a JSON object with this exact structure:
 Ensure there are exactly 2 items in the daily array and 4 items in the weekly array.`
         }
       ],
+      responseFormat: { type: 'json_object' }
     });
 
     const content = getConversationText(response);
@@ -321,7 +313,7 @@ Ensure there are exactly 2 items in the daily array and 4 items in the weekly ar
 
     res.json(result);
   } catch (error) {
-    console.error('Challenges Agent Error:', error);
+    console.error('Challenges Chat Error:', error);
     res.status(500).json({ error: 'Failed to generate challenges.' });
   }
 });
@@ -353,13 +345,16 @@ app.post('/api/resources', async (req, res) => {
     ? [...new Set(completed_skills.map((item) => String(item).trim()).filter(Boolean))].slice(0, 20)
     : [];
 
-  console.log(`[AI Proxy] Generating Resources (Agent) for: ${skill} [${normalizedLevel}]`);
+  console.log(`[AI Proxy] Generating Resources (Chat) for: ${skill} [${normalizedLevel}]`);
 
   try {
-    const response = await client.beta.conversations.start({
-      agentId: RESOURCE_AGENT_ID,
-      agentVersion: AGENT_VERSION,
-      inputs: [
+    const response = await client.chat.complete({
+      model: MISTRAL_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a veteran resource curator. Suggest high-quality learning materials as JSON.'
+        },
         {
           role: 'user',
           content: `You are a dedicated learning resource curator for a student platform.
@@ -395,13 +390,14 @@ Rules:
 - Keep descriptions concise and practical.`
         }
       ],
+      responseFormat: { type: 'json_object' }
     });
 
     const content = getConversationText(response);
     const resources = normalizeResources(extractJsonPayload(content), skill.trim(), normalizedLevel);
     res.json(resources);
   } catch (error) {
-    console.error('Resources Agent Error:', error);
+    console.error('Resources Chat Error:', error);
     res.status(500).json({ error: 'Failed to generate resource suggestions.' });
   }
 });
