@@ -12,9 +12,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const apiKey = process.env.VITE_MISTRAL_API_KEY;
+const apiKey = process.env.MISTRAL_API_KEY || process.env.VITE_MISTRAL_API_KEY;
 const client = apiKey ? new Mistral({ apiKey }) : null;
-const MISTRAL_MODEL = 'mistral-small-latest';
+const CORE_AGENT_ID = 'ag_019d2f6ac8307330a96add21f7cc3608';
+const RESOURCE_AGENT_ID = 'ag_019d3402a32c73748a7385af76bc0ae6';
 const RESOURCE_TYPES = ['video', 'book', 'website', 'practice', 'course', 'project'];
 const RESOURCE_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 
@@ -154,13 +155,9 @@ app.post('/api/classify', async (req, res) => {
   }
 
   try {
-    const response = await client.chat.complete({
-      model: MISTRAL_MODEL,
+    const response = await client.agents.complete({
+      agentId: CORE_AGENT_ID,
       messages: [
-        {
-          role: 'system',
-          content: 'You are an AI activity classifier for a student platform. Categorize activities into "learning", "practice", or "project" and extract technical skills. Return ONLY JSON.'
-        },
         {
           role: 'user',
           content: `Classify the following student activity into exactly one of three categories: "learning", "practice", or "project".
@@ -169,8 +166,7 @@ app.post('/api/classify', async (req, res) => {
           
           Activity: "${description}"`
         }
-      ],
-      responseFormat: { type: 'json_object' }
+      ]
     });
 
     const content = getConversationText(response);
@@ -211,13 +207,9 @@ app.post('/api/roadmap', async (req, res) => {
     : 'No specific skills yet';
 
   try {
-    const response = await client.chat.complete({
-      model: MISTRAL_MODEL,
+    const response = await client.agents.complete({
+      agentId: CORE_AGENT_ID,
       messages: [
-        {
-          role: 'system',
-          content: 'You are a technical mentor. Generate personalized learning roadmaps as JSON.'
-        },
         {
           role: 'user',
           content: `Generate a personalized 8-week learning roadmap for a student with Goal: "${goal}" and Skills: ${skillsSummary}.
@@ -236,8 +228,7 @@ Return your response as a JSON object with this exact structure:
   ]
 }`
         }
-      ],
-      responseFormat: { type: 'json_object' }
+      ]
     });
 
     const content = getConversationText(response);
@@ -271,13 +262,9 @@ app.post('/api/challenges', async (req, res) => {
     : 'No specific skills yet';
 
   try {
-    const response = await client.chat.complete({
-      model: MISTRAL_MODEL,
+    const response = await client.agents.complete({
+      agentId: CORE_AGENT_ID,
       messages: [
-        {
-          role: 'system',
-          content: 'You are a motivation coach for students. Generate technical challenges as JSON.'
-        },
         {
           role: 'user',
           content: `Generate 2 daily challenges and 4 weekly challenges for a student with Goal: "${goal}" and Skills: "${skillsSummary}".
@@ -297,8 +284,7 @@ Return your response ONLY as a JSON object with this exact structure:
 
 Ensure there are exactly 2 items in the daily array and 4 items in the weekly array.`
         }
-      ],
-      responseFormat: { type: 'json_object' }
+      ]
     });
 
     const content = getConversationText(response);
@@ -348,13 +334,9 @@ app.post('/api/resources', async (req, res) => {
   console.log(`[AI Proxy] Generating Resources (Chat) for: ${skill} [${normalizedLevel}]`);
 
   try {
-    const response = await client.chat.complete({
-      model: MISTRAL_MODEL,
+    const response = await client.agents.complete({
+      agentId: RESOURCE_AGENT_ID,
       messages: [
-        {
-          role: 'system',
-          content: 'You are a veteran resource curator. Suggest high-quality learning materials as JSON.'
-        },
         {
           role: 'user',
           content: `You are a dedicated learning resource curator for a student platform.
